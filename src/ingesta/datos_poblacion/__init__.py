@@ -1,0 +1,1 @@
+"""Population and income ingestion."""
