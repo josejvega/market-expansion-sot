@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import geopandas as gpd
 import pandas as pd
+
+_GymOutputMode = Literal["only_gyms", "both", "sports_facilities"]
+_GymCleaningOutput = (
+    gpd.GeoDataFrame | tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]
+)
 
 _FAILED_GYMS_PATH = (
     Path(__file__).resolve().parents[2]
@@ -29,11 +35,14 @@ _OPTIONAL_SOURCE_COLUMNS = [
     "tag_name",
     "tag_leisure",
     "tag_sport",
-    "tag_amenity",
 ]
 # Address tags are omitted because postcode, street, and city appear in few rows.
 # they appear in 400 of 4000 rows approx. and are not used in the current analysis.
-_GYM_COLUMNS = _REQUIRED_SOURCE_COLUMNS + _OPTIONAL_SOURCE_COLUMNS
+_SOURCE_COLUMNS = _REQUIRED_SOURCE_COLUMNS + _OPTIONAL_SOURCE_COLUMNS
+_GYM_OUTPUT_COLUMNS = [
+    column for column in _SOURCE_COLUMNS if column != "tag_sport"
+]
+_SPORTS_FACILITIES_COLUMNS = _SOURCE_COLUMNS.copy()
 _TEXT_COLUMNS = [
     "osm_id",
     "osm_type",
@@ -57,7 +66,7 @@ def _select_gym_columns(gyms: pd.DataFrame) -> pd.DataFrame:
         if column not in selected.columns:
             selected[column] = pd.NA
 
-    return selected.loc[:, _GYM_COLUMNS].copy()
+    return selected.loc[:, _SOURCE_COLUMNS].copy()
 
 
 def _convert_gym_types(gyms: pd.DataFrame) -> pd.DataFrame:
@@ -188,8 +197,31 @@ def _create_gym_geometry(gyms: pd.DataFrame) -> gpd.GeoDataFrame:
     )
 
 
-def clean_gyms(gyms: pd.DataFrame) -> gpd.GeoDataFrame:
-    """Apply the current cleaning steps to an OSM Bronze gym table."""
+def _filter_fitness_centres(
+    sports_facilities: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """Keep facilities tagged as fitness centres in OpenStreetMap."""
+    fitness_centres = sports_facilities.loc[
+        sports_facilities["tag_leisure"].eq("fitness_centre")
+    ].copy()
+    return gpd.GeoDataFrame(
+        fitness_centres,
+        geometry="geometry",
+        crs=sports_facilities.crs,
+    )
+
+
+def clean_gyms(
+    gyms: pd.DataFrame,
+    output_mode: _GymOutputMode = "only_gyms",
+) -> _GymCleaningOutput:
+    """Clean OSM records and return gyms, sports facilities, or both."""
+    valid_output_modes = {"only_gyms", "both", "sports_facilities"}
+    if output_mode not in valid_output_modes:
+        raise ValueError(
+            "output_mode must be 'only_gyms', 'both', or 'sports_facilities'."
+        )
+
     selected = _select_gym_columns(gyms)
     converted = _convert_gym_types(selected)
     normalized = _normalize_gym_text(converted)
@@ -205,4 +237,25 @@ def clean_gyms(gyms: pd.DataFrame) -> gpd.GeoDataFrame:
         [incomplete_records, invalid_coordinate_records]
     ).sort_index(kind="stable")
     _save_failed_gym_records(failed_records.reset_index(drop=True))
-    return _create_gym_geometry(valid_records.reset_index(drop=True))
+    if output_mode == "only_gyms":
+        fitness_centres = _filter_fitness_centres(
+            _create_gym_geometry(valid_records.reset_index(drop=True))
+        )
+        return fitness_centres.loc[
+            :, _GYM_OUTPUT_COLUMNS + ["geometry"]
+        ].reset_index(drop=True)
+
+    sports_facilities = _create_gym_geometry(
+        valid_records.reset_index(drop=True)
+    )
+    if output_mode == "sports_facilities":
+        return sports_facilities
+
+    fitness_centres = _filter_fitness_centres(sports_facilities)
+    gyms_output = fitness_centres.loc[
+        :, _GYM_OUTPUT_COLUMNS + ["geometry"]
+    ].reset_index(drop=True)
+    sports_facilities_output = sports_facilities.loc[
+        :, _SPORTS_FACILITIES_COLUMNS + ["geometry"]
+    ].reset_index(drop=True)
+    return gyms_output, sports_facilities_output

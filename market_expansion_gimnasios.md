@@ -35,7 +35,14 @@ Esta tabla procede de OpenStreetMap y contiene gimnasios o instalaciones deporti
 | `source`, `downloaded_at_utc` | Trazabilidad de la fuente y fecha de descarga. |
 | `tag_*` | Atributos adicionales de OpenStreetMap. Muchos estarán vacíos. |
 
-La tabla Silver de gimnasios conserva los identificadores OSM, la provincia, las coordenadas, la trazabilidad y las etiquetas `name`, `leisure`, `sport` y `amenity`. Añade `geometry` como punto EPSG:4326. Por ahora no incluye `municipality_code`: el CSV de gimnasios no contiene un código municipal fiable y este flujo no incorpora otras fuentes.
+El proceso de calidad genera dos tablas Silver a partir de una sola limpieza:
+
+- `gyms_andalusia.parquet` contiene solo registros con `tag_leisure = fitness_centre`, para contar gimnasios según la definición estricta de OpenStreetMap.
+- `sports_facilities_andalusia.parquet` conserva todas las instalaciones deportivas descargadas, incluidas las que podrían aportar información sobre la oferta deportiva de cada municipio.
+
+Ambas tablas conservan los identificadores OSM, la provincia, las coordenadas, la trazabilidad y las etiquetas `name`, `leisure`, `sport` y `amenity`; además, incluyen `geometry` como punto EPSG:4326. Por ahora no incluyen `municipality_code`: el CSV de gimnasios no contiene un código municipal fiable y este flujo no incorpora otras fuentes.
+
+El parámetro `output_mode` de `clean_gyms` permite elegir `only_gyms` (opción predeterminada), `sports_facilities` o `both`. El modo `both` ejecuta la limpieza común una sola vez y devuelve primero la tabla de gimnasios y después la tabla amplia de instalaciones deportivas.
 
 #### Por qué conservar `osm_type`
 
