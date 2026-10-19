@@ -31,9 +31,11 @@ Esta tabla procede de OpenStreetMap y contiene gimnasios o instalaciones deporti
 | `tag_leisure`, `tag_sport`, `tag_amenity` | Tipo de actividad o instalación. Sirven para filtrar gimnasios reales. |
 | `tag_brand` | Marca comercial, si está informada. |
 | `tag_operator` | Empresa, entidad o persona que opera la instalación, si está informada. |
-| `tag_addr:postcode`, `tag_addr:street`, `tag_addr:city` | Dirección, cuando existe. |
+| `tag_addr:postcode`, `tag_addr:street`, `tag_addr:city` | Campos Bronze de dirección; se omiten de Silver porque solo aparecen en aproximadamente el 11-14 % de las filas. |
 | `source`, `downloaded_at_utc` | Trazabilidad de la fuente y fecha de descarga. |
 | `tag_*` | Atributos adicionales de OpenStreetMap. Muchos estarán vacíos. |
+
+La tabla Silver de gimnasios conserva los identificadores OSM, la provincia, las coordenadas, la trazabilidad y las etiquetas `name`, `leisure`, `sport` y `amenity`. Añade `geometry` como punto EPSG:4326. Por ahora no incluye `municipality_code`: el CSV de gimnasios no contiene un código municipal fiable y este flujo no incorpora otras fuentes.
 
 #### Por qué conservar `osm_type`
 
@@ -169,7 +171,7 @@ Se debe comprobar esta regla en todos los registros antes de utilizarla. Es reco
 
 ### Gimnasios
 
-Los gimnasios no incluyen de forma fiable el municipio. La provincia sí aparece, pero la ciudad de la dirección puede estar vacía. Por ello el municipio se obtiene utilizando `latitude`, `longitude` y la geometría del CNIG.
+El CSV de gimnasios no incluye un código municipal fiable. La provincia sí aparece, pero `tag_addr:city` solo está informado en una parte pequeña de las filas y es texto libre. Por ahora la tabla Silver no añade `municipality_code` ni cruza con fuentes externas. Si más adelante se autoriza una fuente municipal de referencia, las coordenadas y sus geometrías podrían utilizarse para asignarlo espacialmente.
 
 ## 3. Qué significa convertir un gimnasio en un punto geográfico
 
