@@ -2,10 +2,17 @@
 
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 RAW_DIR = DATA_DIR / "raw"
 SILVER_DIR = DATA_DIR / "processed" / "silver"
 FAILED_DIR = SILVER_DIR / "failed"
+
+MUNICIPALITY_BOUNDARIES_BRONZE_PATH = (
+    RAW_DIR / "municipality_boundaries_andalusia.csv"
+)
+MUNICIPALITY_BOUNDARIES_SILVER_PATH = (
+    SILVER_DIR / "limites_municipales_andalucia.parquet"
+)
 
 GYMS_BRONZE_PATH = RAW_DIR / "gyms_andalusia.csv"
 GYMS_SILVER_PATH = SILVER_DIR / "gyms_andalusia.parquet"

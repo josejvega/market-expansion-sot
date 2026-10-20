@@ -5,7 +5,7 @@ from __future__ import annotations
 import geopandas as gpd
 import pandas as pd
 
-from .paths import GYMS_FAILED_PATH
+from .common.paths import GYMS_FAILED_PATH
 
 _REQUIRED_SOURCE_COLUMNS = [
     "osm_type",
@@ -184,10 +184,15 @@ def _validate_gym_coordinates(
     return clean_records, failed_records
 
 
-def _save_failed_gym_records(failed_records: pd.DataFrame) -> None:
+def _save_failed_gym_records(
+    failed_records: pd.DataFrame,
+    output_path: Path | None,
+) -> None:
     """Save rejected gym observations for review."""
-    GYMS_FAILED_PATH.parent.mkdir(parents=True, exist_ok=True)
-    failed_records.to_parquet(GYMS_FAILED_PATH, index=False)
+    if output_path is None:
+        return
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    failed_records.to_parquet(output_path, index=False)
 
 
 def _create_gym_geometry(gyms: pd.DataFrame) -> gpd.GeoDataFrame:
@@ -212,7 +217,10 @@ def _add_sport_centre_type(gyms: pd.DataFrame) -> pd.DataFrame:
     return classified.drop(columns="tag_leisure")
 
 
-def clean_gyms(gyms: pd.DataFrame) -> gpd.GeoDataFrame:
+def clean_gyms(
+    gyms: pd.DataFrame,
+    failed_output_path: Path | None = GYMS_FAILED_PATH,
+) -> gpd.GeoDataFrame:
     """Clean OSM records into one table of gyms and sports facilities."""
     selected = _select_gym_columns(gyms)
     converted = _convert_gym_types(selected)
@@ -228,7 +236,10 @@ def clean_gyms(gyms: pd.DataFrame) -> gpd.GeoDataFrame:
     failed_records = pd.concat(
         [incomplete_records, invalid_coordinate_records]
     ).sort_index(kind="stable")
-    _save_failed_gym_records(failed_records.reset_index(drop=True))
+    _save_failed_gym_records(
+        failed_records.reset_index(drop=True),
+        Path(failed_output_path) if failed_output_path is not None else None,
+    )
     classified_records = _add_sport_centre_type(
         valid_records.reset_index(drop=True)
     )

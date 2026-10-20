@@ -1,27 +1,22 @@
-"""Transform CNIG municipality boundaries from S3 into an Andalusia GeoParquet."""
+"""Transform the local CNIG raw CSV into an Andalusia Silver GeoParquet."""
 
 from __future__ import annotations
 
-import argparse
+import json
 import logging
-import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-import boto3
 import geopandas as gpd
 import pandas as pd
-from botocore.client import BaseClient
-from botocore.config import Config
+from shapely.geometry import shape
 
-from upload_to_s3 import parse_s3_uri, upload_file_to_s3
+from .common.paths import (
+    MUNICIPALITY_BOUNDARIES_BRONZE_PATH,
+    MUNICIPALITY_BOUNDARIES_SILVER_PATH,
+)
 
 LOGGER = logging.getLogger(__name__)
-SOURCE_S3_URI = "s3://sot-05-market-expansion/raw/data/limites_municipales_cnig.gpkg"
-OUTPUT_S3_URI = (
-    "s3://sot-05-market-expansion/processed/cnig/"
-    "limites_municipales_andalucia.parquet"
-)
 SOURCE_NAME = "IGN/CNIG BDDAE"
 ANDALUSIA_PROVINCE_CODES = frozenset({"04", "11", "14", "18", "21", "23", "29", "41"})
 REQUIRED_SOURCE_COLUMNS = [
@@ -119,68 +114,55 @@ def clean_municipality_boundaries(
     ).reset_index(drop=True)
 
 
-def transform_cnig_municipality_boundaries(
-    source_s3_uri: str = SOURCE_S3_URI,
-    output_s3_uri: str = OUTPUT_S3_URI,
-    s3_client: BaseClient | None = None,
-) -> str:
-    """Read a CNIG GeoPackage from S3, transform it, and conditionally upload GeoParquet."""
-    source_bucket, source_key = parse_s3_uri(source_s3_uri)
-    output_bucket, output_key = parse_s3_uri(output_s3_uri)
-    if (source_bucket, source_key) == (output_bucket, output_key):
-        raise ValueError("Source and output S3 objects must be different.")
+def cnig_csv_to_geodataframe(raw_boundaries: pd.DataFrame) -> gpd.GeoDataFrame:
+    """Convert the raw CNIG CSV columns and GeoJSON geometries to a GeoDataFrame."""
+    required_columns = {"nationalCode", "name", "geometry"}
+    missing_columns = sorted(required_columns.difference(raw_boundaries.columns))
+    if missing_columns:
+        raise ValueError(f"Missing required CNIG CSV columns: {missing_columns}")
 
-    client = s3_client or boto3.client(
-        "s3",
-        config=Config(
-            connect_timeout=10,
-            read_timeout=120,
-            retries={"max_attempts": 3, "mode": "standard"},
-        ),
+    national_codes = raw_boundaries["nationalCode"].astype("string").str.strip()
+    geometries = raw_boundaries["geometry"].map(
+        lambda value: shape(json.loads(value)) if value.strip() else None
     )
-    with tempfile.TemporaryDirectory(prefix="cnig-silver-") as temporary_directory:
-        temporary_path = Path(temporary_directory)
-        source_path = temporary_path / "source.gpkg"
-        parquet_path = temporary_path / "limites_municipales_andalucia.parquet"
+    return gpd.GeoDataFrame(
+        {
+            "cnig_national_code": national_codes,
+            "cnig_name": raw_boundaries["name"].astype("string").str.strip(),
+            "ine_code": national_codes.str[-5:],
+        },
+        geometry=geometries,
+        crs="EPSG:4326",
+    )
 
-        client.download_file(source_bucket, source_key, str(source_path))
-        raw_boundaries = gpd.read_file(source_path, layer="municipios")
-        silver_boundaries = clean_municipality_boundaries(raw_boundaries)
-        silver_boundaries.to_parquet(
-            parquet_path,
-            index=False,
-            compression="snappy",
-        )
 
-        upload_file_to_s3(
-            parquet_path,
-            output_s3_uri,
-            content_type="application/vnd.apache.parquet",
-            s3_client=client,
-        )
+def clean_municipality_boundaries_from_csv(
+    source_csv_path: Path = MUNICIPALITY_BOUNDARIES_BRONZE_PATH,
+    output_path: Path = MUNICIPALITY_BOUNDARIES_SILVER_PATH,
+) -> Path:
+    """Read CNIG's raw CSV and create a local Silver GeoParquet."""
+    source_csv_path = Path(source_csv_path)
+    output_path = Path(output_path)
+    if source_csv_path.resolve() == output_path.resolve():
+        raise ValueError("The raw CSV and processed Parquet paths must be different.")
+
+    raw_boundaries = pd.read_csv(
+        source_csv_path,
+        dtype="string",
+        keep_default_na=False,
+    )
+    source_boundaries = cnig_csv_to_geodataframe(raw_boundaries)
+    silver_boundaries = clean_municipality_boundaries(source_boundaries)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    silver_boundaries.to_parquet(
+        output_path,
+        index=False,
+        compression="snappy",
+    )
 
     LOGGER.info(
-        "Uploaded %s Andalusian municipality boundaries to %s.",
+        "Saved %s Andalusian municipality boundaries to %s.",
         len(silver_boundaries),
-        output_s3_uri,
+        output_path,
     )
-    return output_s3_uri
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Transform the CNIG municipality GeoPackage into Silver GeoParquet."
-    )
-    parser.add_argument("--source-uri", default=SOURCE_S3_URI)
-    parser.add_argument("--output-uri", default=OUTPUT_S3_URI)
-    arguments = parser.parse_args()
-
-    logging.basicConfig(level=logging.INFO)
-    transform_cnig_municipality_boundaries(
-        source_s3_uri=arguments.source_uri,
-        output_s3_uri=arguments.output_uri,
-    )
-
-
-if __name__ == "__main__":
-    main()
+    return output_path

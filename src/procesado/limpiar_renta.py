@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 
 from src.ingesta.datos_poblacion.ine.common import ANDALUSIA_PROVINCES
 
-from .paths import INCOME_FAILED_PATH
+from .common.paths import INCOME_FAILED_PATH
 
 _INDICATOR = "Renta neta media por persona"
 _SOURCE_COLUMNS = [
@@ -204,12 +206,17 @@ def _reject_conflicting_records(income: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _save_failed_rows(income: pd.DataFrame) -> None:
+def _save_failed_rows(
+    income: pd.DataFrame,
+    output_path: Path | None,
+) -> None:
     """Write rejected source rows and their explanations to the failed table."""
+    if output_path is None:
+        return
     failed_columns = _SOURCE_COLUMNS + [_FAILURE_COLUMN]
     failed = income.loc[income[_FAILURE_COLUMN].notna(), failed_columns]
-    INCOME_FAILED_PATH.parent.mkdir(parents=True, exist_ok=True)
-    failed.to_parquet(INCOME_FAILED_PATH, index=False)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    failed.to_parquet(output_path, index=False)
 
 
 def _sort_income(income: pd.DataFrame) -> pd.DataFrame:
@@ -257,13 +264,23 @@ def _normalize_clean_income(income: pd.DataFrame) -> pd.DataFrame:
     return _sort_income(cleaned.loc[:, _OUTPUT_COLUMNS])
 
 
-def clean_income(income: pd.DataFrame) -> pd.DataFrame:
+def clean_income(
+    income: pd.DataFrame,
+    failed_output_path: Path | None = INCOME_FAILED_PATH,
+) -> pd.DataFrame:
     """Return valid per-person income records and save rejected rows with reasons."""
     if set(_OUTPUT_COLUMNS).issubset(income.columns):
+        _save_failed_rows(
+            pd.DataFrame(columns=_SOURCE_COLUMNS + [_FAILURE_COLUMN]),
+            Path(failed_output_path) if failed_output_path is not None else None,
+        )
         return _normalize_clean_income(income)
 
     processed = _clean_source_income(income)
-    _save_failed_rows(processed)
+    _save_failed_rows(
+        processed,
+        Path(failed_output_path) if failed_output_path is not None else None,
+    )
     valid = processed.loc[
         processed[_FAILURE_COLUMN].isna(),
         _OUTPUT_COLUMNS,

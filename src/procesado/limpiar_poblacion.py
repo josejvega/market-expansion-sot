@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 
 from src.ingesta.datos_poblacion.ine.common import ANDALUSIA_PROVINCES
 
-from .paths import POPULATION_FAILED_PATH
+from .common.paths import POPULATION_FAILED_PATH
 
 _SOURCE_COLUMNS = [
     "Provincias",
@@ -397,11 +399,16 @@ def _build_population_summary(population: pd.DataFrame) -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
-def _save_failed_population_rows(failed: pd.DataFrame) -> None:
+def _save_failed_population_rows(
+    failed: pd.DataFrame,
+    output_path: Path | None,
+) -> None:
     """Save rejected source rows and their reason for review."""
+    if output_path is None:
+        return
     failed_rows = failed.loc[:, _SOURCE_COLUMNS + [_FAILURE_COLUMN]].copy()
-    POPULATION_FAILED_PATH.parent.mkdir(parents=True, exist_ok=True)
-    failed_rows.to_parquet(POPULATION_FAILED_PATH, index=False)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    failed_rows.to_parquet(output_path, index=False)
 
 
 def _normalize_existing_summary(population: pd.DataFrame) -> pd.DataFrame:
@@ -433,9 +440,16 @@ def _normalize_existing_summary(population: pd.DataFrame) -> pd.DataFrame:
     ).reset_index(drop=True)
 
 
-def clean_population(population: pd.DataFrame) -> pd.DataFrame:
+def clean_population(
+    population: pd.DataFrame,
+    failed_output_path: Path | None = POPULATION_FAILED_PATH,
+) -> pd.DataFrame:
     """Clean population data and save rejected source rows for review."""
     if set(_OUTPUT_COLUMNS).issubset(population.columns):
+        _save_failed_population_rows(
+            pd.DataFrame(columns=_SOURCE_COLUMNS + [_FAILURE_COLUMN]),
+            Path(failed_output_path) if failed_output_path is not None else None,
+        )
         return _normalize_existing_summary(population)
 
     _check_required_columns(population)
@@ -453,5 +467,8 @@ def clean_population(population: pd.DataFrame) -> pd.DataFrame:
     cleaned = _add_incomplete_group_reasons(cleaned)
     valid_rows, failed_rows = _separate_failed_rows(cleaned)
     summary = _build_population_summary(valid_rows)
-    _save_failed_population_rows(failed_rows)
+    _save_failed_population_rows(
+        failed_rows,
+        Path(failed_output_path) if failed_output_path is not None else None,
+    )
     return summary

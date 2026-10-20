@@ -1,21 +1,22 @@
 from __future__ import annotations
 
-import shutil
+import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import geopandas as gpd
 import pandas as pd
-from botocore.exceptions import ClientError
 from shapely.geometry import MultiPolygon, box
 
-from limites_municipales_cnig_to_silver import (
+from src.common.storage import StorageSettings
+from src.procesado.limpiar_limites_municipales import (
     OUTPUT_COLUMNS,
     clean_municipality_boundaries,
-    parse_s3_uri,
-    transform_cnig_municipality_boundaries,
+    clean_municipality_boundaries_from_csv,
 )
+from src.procesado.pipeline import clean_and_upload_municipality_boundaries
 
 
 LOADED_AT_UTC = "2026-10-20T07:00:00+00:00"
@@ -37,50 +38,7 @@ def boundaries_source() -> gpd.GeoDataFrame:
     )
 
 
-class FakeS3Client:
-    def __init__(self, source_path: Path, object_exists: bool = False) -> None:
-        self.source_path = source_path
-        self.object_exists = object_exists
-        self.uploaded_body: bytes | None = None
-        self.upload_arguments: dict[str, object] = {}
-
-    def download_file(self, bucket: str, key: str, filename: str) -> None:
-        self.download_arguments = {"bucket": bucket, "key": key}
-        shutil.copyfile(self.source_path, filename)
-
-    def put_object(self, **arguments: object) -> dict[str, str]:
-        self.upload_arguments = arguments
-        if self.object_exists:
-            raise ClientError(
-                {
-                    "Error": {"Code": "PreconditionFailed"},
-                    "ResponseMetadata": {"HTTPStatusCode": 412},
-                },
-                "PutObject",
-            )
-        body = arguments["Body"]
-        self.uploaded_body = body.read()  # type: ignore[union-attr]
-        return {"ETag": '"test-etag"'}
-
-
 class MunicipalityBoundariesTests(unittest.TestCase):
-    def test_parse_s3_uri_returns_bucket_and_object_key(self) -> None:
-        self.assertEqual(
-            parse_s3_uri(
-                "s3://sot-05-market-expansion/raw/data/limites_municipales_cnig.gpkg"
-            ),
-            (
-                "sot-05-market-expansion",
-                "raw/data/limites_municipales_cnig.gpkg",
-            ),
-        )
-
-    def test_parse_s3_uri_rejects_bucket_only_and_non_s3_uri(self) -> None:
-        with self.assertRaises(ValueError):
-            parse_s3_uri("s3://bucket")
-        with self.assertRaises(ValueError):
-            parse_s3_uri("https://bucket/key")
-
     def test_clean_filters_and_normalizes_andalusian_municipalities(self) -> None:
         result = clean_municipality_boundaries(
             boundaries_source(),
@@ -140,54 +98,68 @@ class MunicipalityBoundariesTests(unittest.TestCase):
                 loaded_at_utc=LOADED_AT_UTC,
             )
 
-    def test_transform_downloads_parquets_and_uploads_without_overwrite(self) -> None:
+    def test_clean_from_csv_saves_silver_parquet(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             temporary_path = Path(temporary_directory)
-            source_path = temporary_path / "source.gpkg"
+            source_path = temporary_path / "source.csv"
             output_path = temporary_path / "result.parquet"
-            boundaries_source().iloc[[0, 1]].to_file(
+            source = boundaries_source().iloc[[0, 1]]
+            pd.DataFrame(
+                {
+                    "nationalCode": source["cnig_national_code"].tolist(),
+                    "name": source["cnig_name"].tolist(),
+                    "geometry": [
+                        json.dumps(geometry.__geo_interface__)
+                        for geometry in source.geometry
+                    ],
+                }
+            ).to_csv(source_path, index=False)
+
+            result_path = clean_municipality_boundaries_from_csv(
                 source_path,
-                layer="municipios",
-                driver="GPKG",
-            )
-            fake_s3 = FakeS3Client(source_path)
-
-            result_uri = transform_cnig_municipality_boundaries(
-                "s3://raw-bucket/raw/municipios.gpkg",
-                "s3://silver-bucket/processed/municipios.parquet",
-                s3_client=fake_s3,  # type: ignore[arg-type]
+                output_path,
             )
 
-            self.assertEqual(
-                fake_s3.download_arguments,
-                {"bucket": "raw-bucket", "key": "raw/municipios.gpkg"},
-            )
-            self.assertEqual(result_uri, "s3://silver-bucket/processed/municipios.parquet")
-            self.assertEqual(fake_s3.upload_arguments["IfNoneMatch"], "*")
-            self.assertEqual(fake_s3.upload_arguments["ContentType"], "application/vnd.apache.parquet")
-            self.assertIsNotNone(fake_s3.uploaded_body)
-            output_path.write_bytes(fake_s3.uploaded_body or b"")
+            self.assertEqual(result_path, output_path)
             restored = gpd.read_parquet(output_path)
             self.assertEqual(len(restored), 2)
             self.assertEqual(list(restored.columns), OUTPUT_COLUMNS)
             self.assertEqual(restored.crs.to_epsg(), 4326)
 
-    def test_transform_fails_if_output_object_already_exists(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            source_path = Path(temporary_directory) / "source.gpkg"
-            boundaries_source().iloc[[0]].to_file(
-                source_path,
-                layer="municipios",
-                driver="GPKG",
-            )
-            fake_s3 = FakeS3Client(source_path, object_exists=True)
+    def test_cnig_s3_only_cleaning_stages_then_removes_silver_output(self) -> None:
+        source = boundaries_source().iloc[[0]]
+        raw_csv = pd.DataFrame(
+            {
+                "nationalCode": source["cnig_national_code"].tolist(),
+                "name": source["cnig_name"].tolist(),
+                "geometry": [
+                    json.dumps(geometry.__geo_interface__)
+                    for geometry in source.geometry
+                ],
+            }
+        )
+        uploaded_paths: list[Path] = []
 
-            with self.assertRaisesRegex(FileExistsError, "Refusing to overwrite"):
-                transform_cnig_municipality_boundaries(
-                    "s3://raw-bucket/raw/municipios.gpkg",
-                    "s3://silver-bucket/processed/municipios.parquet",
-                    s3_client=fake_s3,  # type: ignore[arg-type]
-                )
+        def fake_upload(paths: list[Path], **_: object) -> list[str]:
+            uploaded_paths.extend(paths)
+            self.assertTrue(all(path.is_file() for path in paths))
+            return []
+
+        with (
+            patch(
+                "src.procesado.pipeline.get_storage_settings",
+                return_value=StorageSettings(False, True, "test-bucket", "eu-test-1"),
+            ),
+            patch(
+                "src.procesado.pipeline.upload_files_to_s3",
+                side_effect=fake_upload,
+            ),
+        ):
+            cleaned = clean_and_upload_municipality_boundaries(raw_csv)
+
+        self.assertEqual(cleaned["municipality_code"].tolist(), ["04001"])
+        self.assertEqual(len(uploaded_paths), 1)
+        self.assertFalse(uploaded_paths[0].exists())
 
 
 if __name__ == "__main__":
