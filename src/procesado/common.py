@@ -6,7 +6,7 @@ import pandas as pd
 
 
 def split_ine_municipality_codes(municipalities: pd.Series) -> pd.DataFrame:
-    """Return municipality names and province codes from INE municipality values."""
+    """Return municipality codes, names, and province codes from INE values."""
     parts = municipalities.astype("string").str.extract(
         r"^\s*(\d{5})\s+(.+?)\s*$"
     )
@@ -15,6 +15,7 @@ def split_ine_municipality_codes(municipalities: pd.Series) -> pd.DataFrame:
 
     return pd.DataFrame(
         {
+            "municipality_code": parts[0],
             "municipality": parts[1],
             "province_code": parts[0].str[:2],
         },

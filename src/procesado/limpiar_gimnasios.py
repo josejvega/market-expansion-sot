@@ -2,25 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Literal
-
 import geopandas as gpd
 import pandas as pd
 
-_GymOutputMode = Literal["only_gyms", "both", "sports_facilities"]
-_GymCleaningOutput = (
-    gpd.GeoDataFrame | tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]
-)
+from .paths import GYMS_FAILED_PATH
 
-_FAILED_GYMS_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "data"
-    / "processed"
-    / "silver"
-    / "failed"
-    / "gyms_failed.parquet"
-)
 _REQUIRED_SOURCE_COLUMNS = [
     "osm_type",
     "osm_id",
@@ -39,10 +25,9 @@ _OPTIONAL_SOURCE_COLUMNS = [
 # Address tags are omitted because postcode, street, and city appear in few rows.
 # they appear in 400 of 4000 rows approx. and are not used in the current analysis.
 _SOURCE_COLUMNS = _REQUIRED_SOURCE_COLUMNS + _OPTIONAL_SOURCE_COLUMNS
-_GYM_OUTPUT_COLUMNS = [
-    column for column in _SOURCE_COLUMNS if column != "tag_sport"
-]
-_SPORTS_FACILITIES_COLUMNS = _SOURCE_COLUMNS.copy()
+_OUTPUT_COLUMNS = [
+    column for column in _SOURCE_COLUMNS if column != "tag_leisure"
+] + ["sport_centre_type"]
 _TEXT_COLUMNS = [
     "osm_id",
     "osm_type",
@@ -152,16 +137,26 @@ def _remove_incomplete_gym_records(
     gyms: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Separate records without an OSM ID or coordinates for review."""
-    complete_data = gyms.copy()
     required_value_columns = [
         "osm_type",
         "osm_id",
         "latitude",
         "longitude",
     ]
-    incomplete_rows = complete_data[required_value_columns].isna().any(axis=1)
-    failed_records = complete_data.loc[incomplete_rows].copy()
-    clean_records = complete_data.loc[~incomplete_rows].copy()
+    incomplete_rows = gyms[required_value_columns].isna()
+    failed_mask = incomplete_rows.any(axis=1)
+    failed_records = gyms.loc[failed_mask].copy()
+    failure_reasons = pd.Series("", index=failed_records.index, dtype="string")
+    for column in required_value_columns:
+        missing_value = incomplete_rows.loc[failed_mask, column]
+        failure_reasons.loc[missing_value] = failure_reasons.loc[
+            missing_value
+        ].where(
+            failure_reasons.loc[missing_value].eq(""),
+            failure_reasons.loc[missing_value] + "; ",
+        ) + f"Missing required value: {column}"
+    failed_records["failure_reason"] = failure_reasons
+    clean_records = gyms.loc[~failed_mask].copy()
     return clean_records, failed_records
 
 
@@ -175,13 +170,24 @@ def _validate_gym_coordinates(
 
     clean_records = gyms.loc[~invalid_coordinates].copy()
     failed_records = gyms.loc[invalid_coordinates].copy()
+    reasons = pd.Series("", index=failed_records.index, dtype="string")
+    invalid_latitude = ~valid_latitude.loc[invalid_coordinates]
+    invalid_longitude = ~valid_longitude.loc[invalid_coordinates]
+    reasons.loc[invalid_latitude] = "Latitude outside valid range (-90 to 90)"
+    reasons.loc[invalid_longitude] = "Longitude outside valid range (-180 to 180)"
+    both_invalid = invalid_latitude & invalid_longitude
+    reasons.loc[both_invalid] = (
+        "Latitude outside valid range (-90 to 90); "
+        "longitude outside valid range (-180 to 180)"
+    )
+    failed_records["failure_reason"] = reasons
     return clean_records, failed_records
 
 
 def _save_failed_gym_records(failed_records: pd.DataFrame) -> None:
     """Save rejected gym observations for review."""
-    _FAILED_GYMS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    failed_records.to_parquet(_FAILED_GYMS_PATH, index=False)
+    GYMS_FAILED_PATH.parent.mkdir(parents=True, exist_ok=True)
+    failed_records.to_parquet(GYMS_FAILED_PATH, index=False)
 
 
 def _create_gym_geometry(gyms: pd.DataFrame) -> gpd.GeoDataFrame:
@@ -197,31 +203,17 @@ def _create_gym_geometry(gyms: pd.DataFrame) -> gpd.GeoDataFrame:
     )
 
 
-def _filter_fitness_centres(
-    sports_facilities: gpd.GeoDataFrame,
-) -> gpd.GeoDataFrame:
-    """Keep facilities tagged as fitness centres in OpenStreetMap."""
-    fitness_centres = sports_facilities.loc[
-        sports_facilities["tag_leisure"].eq("fitness_centre")
-    ].copy()
-    return gpd.GeoDataFrame(
-        fitness_centres,
-        geometry="geometry",
-        crs=sports_facilities.crs,
-    )
+def _add_sport_centre_type(gyms: pd.DataFrame) -> pd.DataFrame:
+    """Classify fitness centres separately from other sports facilities."""
+    classified = gyms.copy()
+    is_gym = classified["tag_leisure"].eq("fitness_centre")
+    classified["sport_centre_type"] = "other_sport_facility"
+    classified.loc[is_gym, "sport_centre_type"] = "gym"
+    return classified.drop(columns="tag_leisure")
 
 
-def clean_gyms(
-    gyms: pd.DataFrame,
-    output_mode: _GymOutputMode = "only_gyms",
-) -> _GymCleaningOutput:
-    """Clean OSM records and return gyms, sports facilities, or both."""
-    valid_output_modes = {"only_gyms", "both", "sports_facilities"}
-    if output_mode not in valid_output_modes:
-        raise ValueError(
-            "output_mode must be 'only_gyms', 'both', or 'sports_facilities'."
-        )
-
+def clean_gyms(gyms: pd.DataFrame) -> gpd.GeoDataFrame:
+    """Clean OSM records into one table of gyms and sports facilities."""
     selected = _select_gym_columns(gyms)
     converted = _convert_gym_types(selected)
     normalized = _normalize_gym_text(converted)
@@ -237,25 +229,10 @@ def clean_gyms(
         [incomplete_records, invalid_coordinate_records]
     ).sort_index(kind="stable")
     _save_failed_gym_records(failed_records.reset_index(drop=True))
-    if output_mode == "only_gyms":
-        fitness_centres = _filter_fitness_centres(
-            _create_gym_geometry(valid_records.reset_index(drop=True))
-        )
-        return fitness_centres.loc[
-            :, _GYM_OUTPUT_COLUMNS + ["geometry"]
-        ].reset_index(drop=True)
-
-    sports_facilities = _create_gym_geometry(
+    classified_records = _add_sport_centre_type(
         valid_records.reset_index(drop=True)
     )
-    if output_mode == "sports_facilities":
-        return sports_facilities
-
-    fitness_centres = _filter_fitness_centres(sports_facilities)
-    gyms_output = fitness_centres.loc[
-        :, _GYM_OUTPUT_COLUMNS + ["geometry"]
+    spatial_records = _create_gym_geometry(classified_records)
+    return spatial_records.loc[
+        :, _OUTPUT_COLUMNS + ["geometry"]
     ].reset_index(drop=True)
-    sports_facilities_output = sports_facilities.loc[
-        :, _SPORTS_FACILITIES_COLUMNS + ["geometry"]
-    ].reset_index(drop=True)
-    return gyms_output, sports_facilities_output

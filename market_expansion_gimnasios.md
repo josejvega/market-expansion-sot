@@ -28,21 +28,31 @@ Esta tabla procede de OpenStreetMap y contiene gimnasios o instalaciones deporti
 | `latitude` | Latitud del objeto. |
 | `longitude` | Longitud del objeto. |
 | `tag_name` | Nombre de la instalación. |
-| `tag_leisure`, `tag_sport`, `tag_amenity` | Tipo de actividad o instalación. Sirven para filtrar gimnasios reales. |
+| `tag_leisure`, `tag_sport` | Etiquetas Bronze de la consulta OSM para localizar gimnasios y centros deportivos. `tag_leisure` se usa para derivar `sport_centre_type` y luego se omite de Silver. |
+| `tag_amenity` | Puede aparecer en Bronze como etiqueta OSM, pero no se utiliza en los filtros ni se conserva en las tablas Silver actuales. |
 | `tag_brand` | Marca comercial, si está informada. |
 | `tag_operator` | Empresa, entidad o persona que opera la instalación, si está informada. |
 | `tag_addr:postcode`, `tag_addr:street`, `tag_addr:city` | Campos Bronze de dirección; se omiten de Silver porque solo aparecen en aproximadamente el 11-14 % de las filas. |
 | `source`, `downloaded_at_utc` | Trazabilidad de la fuente y fecha de descarga. |
 | `tag_*` | Atributos adicionales de OpenStreetMap. Muchos estarán vacíos. |
 
-El proceso de calidad genera dos tablas Silver a partir de una sola limpieza:
+#### De Bronze a Silver y filtros aplicados
 
-- `gyms_andalusia.parquet` contiene solo registros con `tag_leisure = fitness_centre`, para contar gimnasios según la definición estricta de OpenStreetMap.
-- `sports_facilities_andalusia.parquet` conserva todas las instalaciones deportivas descargadas, incluidas las que podrían aportar información sobre la oferta deportiva de cada municipio.
+La tabla Bronze parte de una consulta a Overpass para las ocho provincias andaluzas. Contiene las columnas base `osm_type`, `osm_id`, `province_code`, `province`, `latitude`, `longitude`, `source`, `downloaded_at_utc` y las etiquetas OSM disponibles como `tag_*`.
 
-Ambas tablas conservan los identificadores OSM, la provincia, las coordenadas, la trazabilidad y las etiquetas `name`, `leisure`, `sport` y `amenity`; además, incluyen `geometry` como punto EPSG:4326. Por ahora no incluyen `municipality_code`: el CSV de gimnasios no contiene un código municipal fiable y este flujo no incorpora otras fuentes.
+La limpieza genera una sola tabla Silver, `gyms_andalusia.parquet`, con gimnasios e instalaciones deportivas válidas. Conserva las columnas `osm_type`, `osm_id`, `province_code`, `province`, `latitude`, `longitude`, `source`, `downloaded_at_utc`, `tag_name`, `tag_sport`, `sport_centre_type` y `geometry`.
 
-El parámetro `output_mode` de `clean_gyms` permite elegir `only_gyms` (opción predeterminada), `sports_facilities` o `both`. El modo `both` ejecuta la limpieza común una sola vez y devuelve primero la tabla de gimnasios y después la tabla amplia de instalaciones deportivas.
+`sport_centre_type` clasifica cada fila: `gym` cuando Bronze tiene `tag_leisure = fitness_centre`; `other_sport_facility` para las demás instalaciones devueltas por la consulta OSM. La columna Bronze `tag_leisure` no se conserva en Silver.
+
+Filtros y transformaciones aplicados:
+
+- **Consulta Bronze:** busca objetos `fitness_centre`, `sports_centre` o `sport=fitness` dentro de las áreas provinciales de Andalucía.
+- **Limpieza común:** selecciona las columnas de salida, normaliza texto y tipos, elimina copias exactas y conserva la observación más reciente por `osm_type` + `osm_id`.
+- **Rechazo:** envía a `data/processed/silver/failed/gyms_failed.parquet` los objetos sin tipo, identificador o coordenadas obligatorios, y los que tengan latitud fuera de `[-90, 90]` o longitud fuera de `[-180, 180]`. Cada fila lleva `failure_reason`.
+- **Clasificación:** mantiene todas las instalaciones válidas de la consulta en una sola tabla; distingue gimnasios (`gym`) del resto (`other_sport_facility`) mediante `sport_centre_type`.
+- **Geometría:** añade un punto EPSG:4326 a cada instalación.
+
+La tabla conserva identificadores OSM, provincia, coordenadas, trazabilidad y etiquetas seleccionadas. No incluye `municipality_code`: el CSV no contiene un código municipal fiable y este flujo no incorpora otras fuentes.
 
 #### Por qué conservar `osm_type`
 
@@ -68,21 +78,38 @@ No son imprescindibles para calcular la oportunidad de mercado porque suelen ten
 #### Encabezado real
 
 ```text
-Downloaded_at_utc,Edad,Municipios,Periodo,Provincias,Sexo,source,Total
+Provincias,Municipios,Sexo,Edad,Periodo,Total,source,downloaded_at_utc
 ```
 
 > El nombre exacto observado en el archivo es `downloaded_at_utc`, en minúsculas. El resto de columnas aparece como `Edad`, `Municipios`, `Periodo`, `Provincias`, `Sexo`, `source` y `Total`.
 
-#### Columnas a usar
+La tabla Silver contiene una fila por municipio y año:
 
 | Columna | Uso |
 |---|---|
-| `Municipios` | Identificador y nombre. Ejemplo: `04001 Abla`. |
-| `Periodo` | Año del dato. |
-| `Edad` | Permite seleccionar `Todas las edades` o el intervalo de 18 a 50 años. |
-| `Sexo` | Permite sumar hombres y mujeres para obtener población total. |
-| `Total` | Número de personas. |
-| `Provincias` | Control y descripción territorial. |
+| `province_code`, `province` | Código de dos dígitos y nombre de provincia derivados del código municipal. |
+| `municipality_code`, `municipality_name` | Código y nombre extraídos de `Municipios`. |
+| `year` | Periodo del dato. |
+| `population_total` | Población de todas las edades. |
+| `population_18_50` | Suma de la población con edades de 18 a 50 años, inclusive. |
+| `source`, `downloaded_at_utc` | Fuente y fecha UTC de descarga para trazabilidad. |
+
+#### De Bronze a Silver y filtros aplicados
+
+La tabla Bronze conserva las columnas `Provincias`, `Municipios`, `Sexo`, `Edad`, `Periodo`, `Total`, `source` y `downloaded_at_utc`. La ingesta limita Bronze a Andalucía y a los últimos cinco periodos solicitados; dentro de ese alcance conserva los sexos y edades de la fuente.
+
+La tabla Silver `population_andalusia.parquet` contiene una fila por municipio y año, con las columnas mostradas arriba: `province_code`, `province`, `municipality_code`, `municipality_name`, `year`, `population_total`, `population_18_50`, `source` y `downloaded_at_utc`.
+
+Filtros y transformaciones aplicados:
+
+- **Selección:** conserva `Sexo = Total`; no suma filas de hombres y mujeres.
+- **Validación y tipos:** recorta espacios, convierte año y población a enteros, fecha a UTC y deriva municipio/provincia de los códigos INE. Nulos, códigos inválidos, años inválidos y recuentos negativos o no enteros se rechazan.
+- **Duplicados y consistencia:** las observaciones exactamente repetidas se descartan; las observaciones contradictorias para municipio/año/edad, la procedencia inconsistente y los grupos incompletos se rechazan.
+- **Completitud:** exige una observación de `Todas las edades` y las 33 edades individuales de 18 a 50, inclusive, para cada municipio y año.
+- **Cálculo:** `population_total` viene de `Todas las edades`; `population_18_50` es la suma de los registros de edad 18 a 50.
+- **Fallos:** las filas rechazadas se guardan con `failure_reason` en `data/processed/silver/failed/population_failed.parquet`.
+
+En los datos disponibles para este análisis, la población llega hasta 2025. Al combinarla con la tabla de renta, hay que tener en cuenta que la renta disponible corresponde a 2023; por tanto, no representa necesariamente la capacidad de pago en 2025.
 
 El código municipal se obtiene de los cinco primeros caracteres de `Municipios`:
 
@@ -100,18 +127,20 @@ Nombre = Abla
 Municipios,Distritos,Secciones,Indicadores de renta media,Periodo,Total,source,downloaded_at_utc
 ```
 
-#### Columnas a usar
+#### De Bronze a Silver y filtros aplicados
 
-| Columna | Uso |
-|---|---|
-| `Municipios` | Código y nombre del municipio. |
-| `Indicadores de renta media` | Identifica el indicador, por ejemplo renta neta media por persona. |
-| `Periodo` | Año del dato. |
-| `Total` | Valor de la renta. Hay que confirmar la unidad y el separador decimal. |
-| `Distritos`, `Secciones` | Solo son necesarias para análisis inframunicipal. |
-| `source`, `downloaded_at_utc` | Trazabilidad. |
+La tabla Bronze conserva `Municipios`, `Distritos`, `Secciones`, `Indicadores de renta media`, `Periodo`, `Total`, `source` y `downloaded_at_utc`. La ingesta la limita a Andalucía, filas municipales sin distrito ni sección, el indicador `Renta neta media por persona` y los últimos periodos solicitados (uno por defecto).
 
-La renta no es una medida directa de demanda. Se utilizará como variable complementaria para diferenciar un municipio con capacidad para pagar cuotas altas de otro donde sería más adecuado un modelo de bajo coste.
+La tabla Silver `income_andalusia.parquet` conserva solo ese indicador y contiene las columnas `province_code`, `province`, `municipality_code`, `municipality_name`, `year`, `mean_net_income_per_person`, `source` y `downloaded_at_utc`. Los códigos y nombres municipal y provincial se derivan del código INE en `Municipios`.
+
+Filtros y transformaciones aplicados:
+
+- **Selección:** vuelve a limitar el conjunto a filas municipales y al indicador `Renta neta media por persona`.
+- **Validación y tipos:** recorta espacios, valida y convierte el año y el importe a números, convierte `downloaded_at_utc` a UTC y valida el código/nombre municipal y la provincia.
+- **Duplicados y conflictos:** una copia exacta se conserva y las repeticiones se anotan como fallidas; se rechazan los registros de un mismo municipio y año con valores distintos.
+- **Fallos:** datos obligatorios ausentes, importes o códigos inválidos y duplicados/conflictos se guardan con `failure_reason` en `data/processed/silver/failed/income_failed.parquet`.
+
+La fuente no desglosa la renta por tramo de edad. Esta limitación impide calcular la renta media específica del público objetivo de 18 a 50 años, así que `mean_net_income_per_person` es un indicador general y no debe interpretarse como renta específica de ese grupo. El dato de renta disponible corresponde a 2023, mientras que la población llega hasta 2025. Se utilizará como variable complementaria de capacidad de pago, no como una medida directa de demanda, teniendo presente que su año de referencia es anterior.
 
 ### `municipality_boundaries_andalusia.csv`
 
@@ -397,12 +426,12 @@ Hay que controlar el caso de municipios con población inicial igual a cero para
 
 ## 8. Cómo reflejar el crecimiento en las tablas
 
-### Tabla intermedia de población
+### Tabla Silver de población
 
 ```text
-municipality_code | municipality_name | period | age_group | sex | population
-04001             | Abla              | 2023   | 18-50      | Total | 1200
-04001             | Abla              | 2025   | 18-50      | Total | 1260
+province_code | province | municipality_code | municipality_name | year | population_total | population_18_50 | source | downloaded_at_utc
+04            | Almería  | 04001            | Abla              | 2023 | 1259            | 462              | INE    | 2026-10-16T08:00:00+00:00
+04            | Almería  | 04001            | Abla              | 2025 | 1267            | 464              | INE    | 2026-10-16T08:00:00+00:00
 ```
 
 ### Tabla de indicadores de población
