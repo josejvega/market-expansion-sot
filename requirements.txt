@@ -1,3 +1,7 @@
+ipykernel
+pandas
+requests
 boto3>=1.42,<2
+python-dotenv
 geopandas==1.0.1
 pyarrow==21.0.0
