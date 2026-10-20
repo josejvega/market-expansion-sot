@@ -140,6 +140,8 @@ Filtros y transformaciones aplicados:
 - **Duplicados y conflictos:** una copia exacta se conserva y las repeticiones se anotan como fallidas; se rechazan los registros de un mismo municipio y año con valores distintos.
 - **Fallos:** datos obligatorios ausentes, importes o códigos inválidos y duplicados/conflictos se guardan con `failure_reason` en `data/processed/silver/failed/income_failed.parquet`.
 
+En los datos de 2023, tres municipios andaluces no tienen un importe de renta publicado en el CSV: **Benitagla y Darrícal (Almería), y Cumbres de Enmedio (Huelva)**. La fuente los marca con `.` o deja el valor vacío, por lo que no se incluyen en la tabla Silver de renta. Son municipios muy pequeños, así que la falta de publicación puede estar relacionada con su tamaño poblacional; esta explicación es una interpretación y no está confirmada por una nota de supresión en el archivo consultado. No debe interpretarse como renta cero ni como que esos municipios se descarten del análisis completo: pueden mantenerse al unir las tablas, con la renta como valor ausente.
+
 La fuente no desglosa la renta por tramo de edad. Esta limitación impide calcular la renta media específica del público objetivo de 18 a 50 años, así que `mean_net_income_per_person` es un indicador general y no debe interpretarse como renta específica de ese grupo. El dato de renta disponible corresponde a 2023, mientras que la población llega hasta 2025. Se utilizará como variable complementaria de capacidad de pago, no como una medida directa de demanda, teniendo presente que su año de referencia es anterior.
 
 ### `municipality_boundaries_andalusia.csv`
