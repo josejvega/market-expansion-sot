@@ -7,14 +7,14 @@ import logging
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import unquote, urlsplit
 
 import boto3
 import geopandas as gpd
 import pandas as pd
 from botocore.client import BaseClient
 from botocore.config import Config
-from botocore.exceptions import ClientError
+
+from upload_to_s3 import parse_s3_uri, upload_file_to_s3
 
 LOGGER = logging.getLogger(__name__)
 SOURCE_S3_URI = "s3://sot-05-market-expansion/raw/data/limites_municipales_cnig.gpkg"
@@ -38,17 +38,6 @@ OUTPUT_COLUMNS = [
     "source",
     "loaded_at_utc",
 ]
-
-
-def parse_s3_uri(uri: str) -> tuple[str, str]:
-    """Return the bucket and object key from a complete S3 URI."""
-    parsed = urlsplit(uri)
-    key = unquote(parsed.path.lstrip("/"))
-    if parsed.scheme != "s3" or not parsed.netloc or not key:
-        raise ValueError(f"Expected an S3 object URI, got: {uri!r}")
-    if parsed.query or parsed.fragment:
-        raise ValueError("S3 object URIs must not contain a query or fragment.")
-    return parsed.netloc, key
 
 
 def clean_municipality_boundaries(
@@ -163,25 +152,12 @@ def transform_cnig_municipality_boundaries(
             compression="snappy",
         )
 
-        try:
-            with parquet_path.open("rb") as parquet_file:
-                client.put_object(
-                    Bucket=output_bucket,
-                    Key=output_key,
-                    Body=parquet_file,
-                    ContentType="application/vnd.apache.parquet",
-                    IfNoneMatch="*",
-                )
-        except ClientError as error:
-            error_code = error.response.get("Error", {}).get("Code")
-            status_code = error.response.get("ResponseMetadata", {}).get(
-                "HTTPStatusCode"
-            )
-            if error_code == "PreconditionFailed" or status_code == 412:
-                raise FileExistsError(
-                    f"Refusing to overwrite existing S3 object: {output_s3_uri}"
-                ) from error
-            raise
+        upload_file_to_s3(
+            parquet_path,
+            output_s3_uri,
+            content_type="application/vnd.apache.parquet",
+            s3_client=client,
+        )
 
     LOGGER.info(
         "Uploaded %s Andalusian municipality boundaries to %s.",
