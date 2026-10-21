@@ -138,11 +138,26 @@ class MunicipalityBoundariesTests(unittest.TestCase):
             output_path = temporary_path / "result.parquet"
             failed_path = temporary_path / "municipalities_failed.parquet"
             source = boundaries_source().iloc[[0, 1]]
+            json_municipality_name = json.dumps(
+                {
+                    "GeographicalName": {
+                        "spelling": {
+                            "SpellingOfName": {
+                                "text": "Garrucha",
+                            },
+                        },
+                    },
+                }
+            )
             source_csv = pd.DataFrame(
                 {
                     "nationalCode": source["cnig_national_code"].tolist()
                     + ["34010404003"],
-                    "name": source["cnig_name"].tolist() + ["Bad geometry"],
+                    "name": [
+                        json_municipality_name,
+                        source["cnig_name"].iloc[1],
+                        "Bad geometry",
+                    ],
                     "geometry": [
                         json.dumps(geometry.__geo_interface__)
                         for geometry in source.geometry
@@ -163,6 +178,13 @@ class MunicipalityBoundariesTests(unittest.TestCase):
             self.assertEqual(len(restored), 2)
             self.assertEqual(list(restored.columns), OUTPUT_COLUMNS)
             self.assertEqual(restored.crs.to_epsg(), 4326)
+            self.assertEqual(
+                restored.loc[
+                    restored["municipality_code"].eq("04001"),
+                    "municipality_name",
+                ].item(),
+                "Garrucha",
+            )
             rejected = gpd.read_parquet(failed_path)
             self.assertEqual(len(rejected), 1)
             self.assertEqual(rejected.iloc[0]["nationalCode"], "34010404003")

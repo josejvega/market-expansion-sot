@@ -246,7 +246,9 @@ def cnig_csv_to_geodataframe(raw_boundaries: pd.DataFrame) -> gpd.GeoDataFrame:
     source_rows = source_rows.drop(columns="geometry")
     national_codes = source_rows["nationalCode"].astype("string").str.strip()
     source_rows["cnig_national_code"] = national_codes
-    source_rows["cnig_name"] = source_rows["name"].astype("string").str.strip()
+    source_rows["cnig_name"] = source_rows["name"].map(
+        _extract_cnig_municipality_name
+    ).astype("string")
     source_rows["ine_code"] = national_codes.str[-5:]
     source_rows["_failure_reason"] = parse_reasons
     return gpd.GeoDataFrame(
@@ -254,6 +256,35 @@ def cnig_csv_to_geodataframe(raw_boundaries: pd.DataFrame) -> gpd.GeoDataFrame:
         geometry=parsed_geometries,
         crs="EPSG:4326",
     )
+
+
+def _extract_cnig_municipality_name(value: object) -> object:
+    if pd.isna(value):
+        return pd.NA
+    raw_name = str(value).strip()
+    try:
+        parsed_name = json.loads(raw_name)
+    except json.JSONDecodeError:
+        return raw_name
+
+    if isinstance(parsed_name, str):
+        return parsed_name.strip()
+    if not isinstance(parsed_name, dict):
+        return raw_name
+
+    geographical_name = parsed_name.get("GeographicalName")
+    if not isinstance(geographical_name, dict):
+        return pd.NA
+    spelling = geographical_name.get("spelling")
+    if not isinstance(spelling, dict):
+        return pd.NA
+    spelling_of_name = spelling.get("SpellingOfName")
+    if not isinstance(spelling_of_name, dict):
+        return pd.NA
+    municipality_name = spelling_of_name.get("text")
+    if not isinstance(municipality_name, str) or not municipality_name.strip():
+        return pd.NA
+    return municipality_name.strip()
 
 
 def clean_municipality_boundaries_from_csv(
