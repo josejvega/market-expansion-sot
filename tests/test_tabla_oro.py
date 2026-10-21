@@ -20,7 +20,7 @@ def population_data() -> pd.DataFrame:
             "province": ["Almería"] * 6,
             "year": [2020, 2021, 2022, 2021, 2022, 2022],
             "population_total": [100, 110, 120, 200, 220, 50],
-            "population_18_50": [30, 32, 35, 80, 90, 20],
+            "population_18_50": [30, 32, 35, 80, 90, 0],
         }
     )
 
@@ -72,6 +72,7 @@ class GoldTableTests(unittest.TestCase):
                 "mean_net_income_per_person",
                 "gyms_count",
                 "other_sports_facilities_count",
+                "gyms_per_10k_18_50",
             ],
         )
         first_municipality = result.loc[
@@ -86,6 +87,10 @@ class GoldTableTests(unittest.TestCase):
         self.assertEqual(first_municipality["mean_net_income_per_person"], 11000)
         self.assertEqual(first_municipality["gyms_count"], 2)
         self.assertEqual(first_municipality["other_sports_facilities_count"], 1)
+        self.assertAlmostEqual(
+            first_municipality["gyms_per_10k_18_50"],
+            2 / 35 * 10_000,
+        )
 
         second_municipality = result.loc[
             result["municipality_code"].eq("04002")
@@ -94,6 +99,10 @@ class GoldTableTests(unittest.TestCase):
         self.assertEqual(second_municipality["income_year"], 2023)
         self.assertEqual(second_municipality["gyms_count"], 0)
         self.assertEqual(second_municipality["other_sports_facilities_count"], 1)
+        self.assertEqual(
+            second_municipality["gyms_per_10k_18_50"],
+            0,
+        )
 
         third_municipality = result.loc[
             result["municipality_code"].eq("04003")
@@ -102,6 +111,11 @@ class GoldTableTests(unittest.TestCase):
         self.assertTrue(pd.isna(third_municipality["income_year"]))
         self.assertEqual(third_municipality["gyms_count"], 0)
         self.assertEqual(third_municipality["other_sports_facilities_count"], 0)
+        self.assertTrue(
+            pd.isna(
+                third_municipality["gyms_per_10k_18_50"]
+            )
+        )
 
     def test_rejects_duplicate_municipality_year_rows(self) -> None:
         duplicated_population = pd.concat(

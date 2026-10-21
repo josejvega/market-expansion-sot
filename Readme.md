@@ -30,7 +30,10 @@ The cleaned gym points are spatially joined to the CNIG boundaries and saved as
 gyms remain in the output with null municipality fields.
 The municipality Gold table keeps the latest population and income values,
 the population change from the first to latest available year, and separate
-gym and other-sports-facility counts. It is saved locally under
+gym and other-sports-facility counts. It also includes
+`gyms_per_10k_18_50`, calculated as
+`gyms_count / population_18_50 * 10000`; it is null when the target population
+is zero. It is saved locally under
 `data/processed/gold/tabla_oro_municipios_andalucia.parquet` and uploaded to
 the S3 `gold/` prefix.
 `notebooks/01_ingesta.ipynb` uploads immediately after each raw download when

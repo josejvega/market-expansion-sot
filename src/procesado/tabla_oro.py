@@ -26,6 +26,7 @@ GOLD_COLUMNS = [
     "mean_net_income_per_person",
     "gyms_count",
     "other_sports_facilities_count",
+    "gyms_per_10k_18_50",
 ]
 
 
@@ -236,6 +237,13 @@ def create_gold_table(
     gold["population_growth_pct"] = gold["population_growth_pct"].astype("Float64")
     for column in ("gyms_count", "other_sports_facilities_count"):
         gold[column] = gold[column].fillna(0).astype("int64")
+    gold["gyms_per_10k_18_50"] = (
+        gold["gyms_count"]
+        .div(gold["population_18_50"])
+        .mul(10_000)
+        .where(gold["population_18_50"].gt(0))
+        .astype("Float64")
+    )
 
     return (
         gold.loc[:, GOLD_COLUMNS]
