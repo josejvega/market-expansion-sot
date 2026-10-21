@@ -14,12 +14,15 @@ from src.common.upload_to_s3 import upload_files_to_s3
 from src.procesado.common.paths import (
     GYMS_FAILED_PATH,
     GYMS_SILVER_PATH,
+    GYMS_WITH_MUNICIPALITY_SILVER_PATH,
     INCOME_FAILED_PATH,
     INCOME_SILVER_PATH,
+    MUNICIPALITY_BOUNDARIES_FAILED_PATH,
     MUNICIPALITY_BOUNDARIES_SILVER_PATH,
     POPULATION_FAILED_PATH,
     POPULATION_SILVER_PATH,
 )
+from src.procesado.cruzar_gimnasios_municipios import assign_municipalities_to_gyms
 from src.procesado.limpiar_gimnasios import clean_gyms
 from src.procesado.limpiar_limites_municipales import (
     clean_municipality_boundaries,
@@ -112,7 +115,17 @@ def clean_and_upload_municipality_boundaries(
     source = cnig_csv_to_geodataframe(raw_boundaries)
 
     def persist(temporary_dir: Path | None) -> gpd.GeoDataFrame:
-        cleaned = clean_municipality_boundaries(source)
+        output_failed = (
+            MUNICIPALITY_BOUNDARIES_FAILED_PATH
+            if settings.save_locally
+            else temporary_dir / MUNICIPALITY_BOUNDARIES_FAILED_PATH.name
+            if temporary_dir is not None
+            else None
+        )
+        cleaned = clean_municipality_boundaries(
+            source,
+            failed_output_path=output_failed,
+        )
         output_path = (
             MUNICIPALITY_BOUNDARIES_SILVER_PATH
             if settings.save_locally
@@ -130,6 +143,13 @@ def clean_and_upload_municipality_boundaries(
                     bucket_name=settings.bucket_name,
                     region_name=settings.region_name,
                 )
+        if output_failed is not None and settings.save_s3:
+            upload_files_to_s3(
+                [output_failed],
+                prefix=FAILED_PREFIX,
+                bucket_name=settings.bucket_name,
+                region_name=settings.region_name,
+            )
         return cleaned
 
     if settings.save_locally:
@@ -138,3 +158,31 @@ def clean_and_upload_municipality_boundaries(
         with TemporaryDirectory(prefix="market-expansion-silver-") as directory:
             return persist(Path(directory))
     return persist(None)
+
+
+def cross_and_upload_gyms_municipalities(
+    gyms: gpd.GeoDataFrame,
+    municipalities: gpd.GeoDataFrame,
+) -> gpd.GeoDataFrame:
+    """Join cleaned gym points to municipality boundaries and persist the result."""
+    joined = assign_municipalities_to_gyms(gyms, municipalities)
+    settings = get_storage_settings()
+
+    def persist(output_path: Path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        joined.to_parquet(output_path, index=False, compression="snappy")
+        if settings.save_s3:
+            upload_files_to_s3(
+                [output_path],
+                prefix=SILVER_PREFIX,
+                bucket_name=settings.bucket_name,
+                region_name=settings.region_name,
+            )
+
+    if settings.save_locally:
+        persist(GYMS_WITH_MUNICIPALITY_SILVER_PATH)
+    elif settings.save_s3:
+        with TemporaryDirectory(prefix="market-expansion-silver-") as directory:
+            persist(Path(directory) / GYMS_WITH_MUNICIPALITY_SILVER_PATH.name)
+
+    return joined

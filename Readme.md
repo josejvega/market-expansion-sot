@@ -23,6 +23,11 @@ never uploaded.
 
 Raw CSV datasets go to `raw/data/`. Silver Parquet datasets go to
 `processed/silver/`, and rejected rows go to `processed/silver/failed/`.
+CNIG boundary rejects are written to
+`limites_municipales_andalucia_failed.parquet` with a `failure_reason` column.
+The cleaned gym points are spatially joined to the CNIG boundaries and saved as
+`gyms_with_municipality_andalusia.parquet` in `processed/silver/`; unmatched
+gyms remain in the output with null municipality fields.
 `notebooks/01_ingesta.ipynb` uploads immediately after each raw download when
 `SAVE_S3=true`; `notebooks/02_calidad.ipynb` similarly persists each cleaned
 dataset as it is produced. There are no separate upload cells.
@@ -33,12 +38,11 @@ uses the local CSV when available. If neither source is available, it raises an
 error rather than continuing with missing data.
 
 Set `S3_BUCKET` in `.env` and provide AWS credentials through the standard
-boto3 credential chain. S3 uploads are best-effort: if AWS is unavailable or
-rejects an upload, a warning is logged and processing continues. When local
-persistence is enabled, the local output remains available after an upload
-failure. In S3-only mode, the temporary output is removed when processing
-finishes, including after a failed upload; review the warning before relying
-on that output.
+boto3 credential chain. Uploads fail explicitly if the bucket is missing or
+AWS rejects a transfer, so the pipeline cannot report a successful run after
+a failed upload. When local persistence is enabled, the local output remains
+available after an upload failure. In S3-only mode, temporary outputs are
+removed when processing exits, including when an upload raises an error.
 
 Repeated uploads use the same object keys and replace the current objects
 (subject to the bucket's versioning settings), rather than creating new keys.

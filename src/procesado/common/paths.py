@@ -13,9 +13,15 @@ MUNICIPALITY_BOUNDARIES_BRONZE_PATH = (
 MUNICIPALITY_BOUNDARIES_SILVER_PATH = (
     SILVER_DIR / "limites_municipales_andalucia.parquet"
 )
+MUNICIPALITY_BOUNDARIES_FAILED_PATH = (
+    FAILED_DIR / "limites_municipales_andalucia_failed.parquet"
+)
 
 GYMS_BRONZE_PATH = RAW_DIR / "gyms_andalusia.csv"
 GYMS_SILVER_PATH = SILVER_DIR / "gyms_andalusia.parquet"
+GYMS_WITH_MUNICIPALITY_SILVER_PATH = (
+    SILVER_DIR / "gyms_with_municipality_andalusia.parquet"
+)
 GYMS_FAILED_PATH = FAILED_DIR / "gyms_failed.parquet"
 
 POPULATION_BRONZE_PATH = RAW_DIR / "population_andalusia.csv"
