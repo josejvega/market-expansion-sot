@@ -28,6 +28,11 @@ CNIG boundary rejects are written to
 The cleaned gym points are spatially joined to the CNIG boundaries and saved as
 `gyms_with_municipality_andalusia.parquet` in `processed/silver/`; unmatched
 gyms remain in the output with null municipality fields.
+The municipality Gold table keeps the latest population and income values,
+the population change from the first to latest available year, and separate
+gym and other-sports-facility counts. It is saved locally under
+`data/processed/gold/tabla_oro_municipios_andalucia.parquet` and uploaded to
+the S3 `gold/` prefix.
 `notebooks/01_ingesta.ipynb` uploads immediately after each raw download when
 `SAVE_S3=true`; `notebooks/02_calidad.ipynb` similarly persists each cleaned
 dataset as it is produced. There are no separate upload cells.

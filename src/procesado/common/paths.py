@@ -6,6 +6,8 @@ DATA_DIR = Path(__file__).resolve().parents[3] / "data"
 RAW_DIR = DATA_DIR / "raw"
 SILVER_DIR = DATA_DIR / "processed" / "silver"
 FAILED_DIR = SILVER_DIR / "failed"
+GOLD_DIR = DATA_DIR / "processed" / "gold"
+GOLD_TABLE_PATH = GOLD_DIR / "tabla_oro_municipios_andalucia.parquet"
 
 MUNICIPALITY_BOUNDARIES_BRONZE_PATH = (
     RAW_DIR / "municipality_boundaries_andalusia.csv"

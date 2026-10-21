@@ -5,3 +5,4 @@ venv/
 data
 tests/*
 !tests/test_run.py
+!tests/test_tabla_oro.py
