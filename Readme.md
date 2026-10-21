@@ -57,3 +57,26 @@ processing wrapper in `notebooks/02_calidad.ipynb`.
 INE CSV downloads stream with a five-minute read timeout and retry transient
 connection failures up to three times. A failed transfer is discarded instead
 of being treated as a complete source file.
+
+## Run the notebooks
+
+Install the project dependencies and execute the ingestion and processing
+notebooks in order:
+
+```bash
+python -m pip install -r requirements.txt
+python run.py
+```
+
+`run.py` executes `01_ingesta.ipynb` followed by `02_calidad.ipynb`, using the
+project root as the working directory. Each cell has a one-hour timeout by
+default; pass `--timeout SECONDS` to change it. The command stops and returns
+an error if a notebook cell fails. It creates a temporary Jupyter kernel using
+the same Python interpreter that launched `run.py` and does not overwrite the
+notebook files.
+
+This also works on EC2 when the instance has the project dependencies installed,
+network access to the data sources, and AWS permissions for the configured S3
+bucket. Prefer an EC2 instance role for AWS credentials; boto3 uses its standard
+credential chain. Configure the storage variables in `.env` or in the process
+environment before running the command.

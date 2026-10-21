@@ -3,4 +3,5 @@ __pycache__/
 .venv/
 venv/
 data
-tests
+tests/*
+!tests/test_run.py
