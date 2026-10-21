@@ -51,7 +51,13 @@ class UploadToS3Tests(unittest.TestCase):
             local_file = Path(temporary_directory) / "population_andalusia.csv"
             local_file.write_text("municipality\nAbla\n", encoding="utf-8")
             with (
-                patch.dict(os.environ, {"S3_BUCKET": "test-bucket"}),
+                patch.dict(
+                    os.environ,
+                    {
+                        "S3_BUCKET": "test-bucket",
+                        "AWS_DEFAULT_REGION": "",
+                    },
+                ),
                 patch("src.common.upload_to_s3.load_dotenv"),
                 patch("src.common.upload_to_s3.boto3.client") as create_client,
             ):
