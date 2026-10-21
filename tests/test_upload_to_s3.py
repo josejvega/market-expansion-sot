@@ -29,11 +29,17 @@ class UploadToS3Tests(unittest.TestCase):
                     region_name="eu-west-1",
                 )
 
-        create_client.assert_called_once_with("s3", region_name="eu-west-1")
+        create_client.assert_called_once()
+        self.assertEqual(create_client.call_args.args, ("s3",))
+        self.assertEqual(
+            create_client.call_args.kwargs["region_name"],
+            "eu-west-1",
+        )
         create_client.return_value.upload_file.assert_called_once_with(
             str(local_file),
             "example-bucket",
             "raw/data/population_andalusia.csv",
+            ExtraArgs={"ContentType": "text/csv"},
         )
         self.assertEqual(
             uris,
@@ -46,22 +52,26 @@ class UploadToS3Tests(unittest.TestCase):
             local_file.write_text("municipality\nAbla\n", encoding="utf-8")
             with (
                 patch.dict(os.environ, {"S3_BUCKET": "test-bucket"}),
+                patch("src.common.upload_to_s3.load_dotenv"),
                 patch("src.common.upload_to_s3.boto3.client") as create_client,
             ):
                 uris = upload_files_to_s3([local_file], prefix="raw/data")
 
-        create_client.assert_called_once_with("s3")
+        create_client.assert_called_once()
+        self.assertEqual(create_client.call_args.args, ("s3",))
+        self.assertNotIn("region_name", create_client.call_args.kwargs)
         create_client.return_value.upload_file.assert_called_once_with(
             str(local_file),
             "test-bucket",
             "raw/data/population_andalusia.csv",
+            ExtraArgs={"ContentType": "text/csv"},
         )
         self.assertEqual(
             uris,
             ["s3://test-bucket/raw/data/population_andalusia.csv"],
         )
 
-    def test_batch_upload_warns_when_bucket_is_not_configured(self) -> None:
+    def test_batch_upload_requires_a_bucket_name(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             local_file = Path(temporary_directory) / "population.csv"
             local_file.write_text("municipality\nAbla\n", encoding="utf-8")
@@ -70,16 +80,13 @@ class UploadToS3Tests(unittest.TestCase):
                 patch("src.common.upload_to_s3.load_dotenv"),
                 patch("src.common.upload_to_s3.boto3.client") as create_client,
             ):
-                with self.assertLogs("src.common.upload_to_s3", level="WARNING") as logs:
-                    uploaded = upload_files_to_s3([local_file])
+                with self.assertRaisesRegex(ValueError, "bucket name"):
+                    upload_files_to_s3([local_file])
 
             create_client.assert_not_called()
             self.assertTrue(local_file.is_file())
 
-        self.assertEqual(uploaded, [])
-        self.assertIn("S3_BUCKET is not configured", logs.output[0])
-
-    def test_batch_upload_warns_and_continues_after_s3_upload_failure(self) -> None:
+    def test_batch_upload_raises_and_stops_after_s3_upload_failure(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             first_file = Path(temporary_directory) / "first.csv"
             second_file = Path(temporary_directory) / "second.csv"
@@ -94,10 +101,9 @@ class UploadToS3Tests(unittest.TestCase):
                         },
                         "PutObject",
                     ),
-                    None,
                 ]
-                with self.assertLogs("src.common.upload_to_s3", level="WARNING") as logs:
-                    uploaded = upload_files_to_s3(
+                with self.assertRaises(ClientError):
+                    upload_files_to_s3(
                         [first_file, second_file],
                         bucket_name="example-bucket",
                         prefix="raw/data",
@@ -105,14 +111,9 @@ class UploadToS3Tests(unittest.TestCase):
             self.assertTrue(first_file.is_file())
             self.assertTrue(second_file.is_file())
 
-        self.assertEqual(
-            uploaded,
-            ["s3://example-bucket/raw/data/second.csv"],
-        )
-        self.assertEqual(create_client.return_value.upload_file.call_count, 2)
-        self.assertIn("local file was kept", logs.output[0])
+        self.assertEqual(create_client.return_value.upload_file.call_count, 1)
 
-    def test_batch_upload_warns_if_s3_client_cannot_be_created(self) -> None:
+    def test_batch_upload_raises_if_s3_client_cannot_be_created(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             local_file = Path(temporary_directory) / "population.csv"
             local_file.write_text("municipality\nAbla\n", encoding="utf-8")
@@ -120,12 +121,30 @@ class UploadToS3Tests(unittest.TestCase):
                 "src.common.upload_to_s3.boto3.client",
                 side_effect=NoCredentialsError(),
             ):
-                with self.assertLogs("src.common.upload_to_s3", level="WARNING") as logs:
-                    uploaded = upload_files_to_s3([local_file])
+                with self.assertRaises(NoCredentialsError):
+                    upload_files_to_s3(
+                        [local_file],
+                        bucket_name="example-bucket",
+                    )
             self.assertTrue(local_file.is_file())
 
-        self.assertEqual(uploaded, [])
-        self.assertIn("local files were kept", logs.output[0])
+    def test_batch_upload_sets_content_type_for_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            local_file = Path(temporary_directory) / "population.csv"
+            local_file.write_text("municipality\nAbla\n", encoding="utf-8")
+            with patch("src.common.upload_to_s3.boto3.client") as create_client:
+                upload_files_to_s3(
+                    [local_file],
+                    bucket_name="example-bucket",
+                    prefix="raw/data",
+                )
+
+        create_client.return_value.upload_file.assert_called_once_with(
+            str(local_file),
+            "example-bucket",
+            "raw/data/population.csv",
+            ExtraArgs={"ContentType": "text/csv"},
+        )
 
 
 class StoragePipelineTests(unittest.TestCase):
