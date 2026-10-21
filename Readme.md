@@ -23,6 +23,8 @@ never uploaded.
 
 Raw CSV datasets go to `raw/data/`. Silver Parquet datasets go to
 `processed/silver/`, and rejected rows go to `processed/silver/failed/`.
+CNIG boundary rejects are written to
+`limites_municipales_andalucia_failed.parquet` with a `failure_reason` column.
 `notebooks/01_ingesta.ipynb` uploads immediately after each raw download when
 `SAVE_S3=true`; `notebooks/02_calidad.ipynb` similarly persists each cleaned
 dataset as it is produced. There are no separate upload cells.

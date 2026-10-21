@@ -13,6 +13,7 @@ from shapely.geometry import shape
 
 from .common.paths import (
     MUNICIPALITY_BOUNDARIES_BRONZE_PATH,
+    MUNICIPALITY_BOUNDARIES_FAILED_PATH,
     MUNICIPALITY_BOUNDARIES_SILVER_PATH,
 )
 
@@ -33,13 +34,15 @@ OUTPUT_COLUMNS = [
     "source",
     "loaded_at_utc",
 ]
+FAILURE_COLUMN = "failure_reason"
 
 
 def clean_municipality_boundaries(
     boundaries: gpd.GeoDataFrame,
     loaded_at_utc: str | pd.Timestamp | None = None,
+    failed_output_path: Path | None = MUNICIPALITY_BOUNDARIES_FAILED_PATH,
 ) -> gpd.GeoDataFrame:
-    """Normalize, validate, and retain Andalusian CNIG municipality boundaries."""
+    """Clean Andalusian boundaries and save rejected source rows for review."""
     missing_columns = sorted(
         set(REQUIRED_SOURCE_COLUMNS).difference(boundaries.columns)
     )
@@ -48,70 +51,168 @@ def clean_municipality_boundaries(
     if boundaries.crs is None:
         raise ValueError("CNIG boundaries must have a declared coordinate reference system.")
 
-    normalized = boundaries.loc[:, REQUIRED_SOURCE_COLUMNS].copy()
-    normalized = normalized.to_crs("EPSG:4326")
+    normalized = boundaries.copy().reset_index(drop=True).to_crs("EPSG:4326")
     for column in ("cnig_national_code", "cnig_name", "ine_code"):
         normalized[column] = normalized[column].astype("string").str.strip()
-        missing_values = normalized[column].isna() | normalized[column].eq("")
-        if missing_values.any():
-            raise ValueError(f"CNIG column {column!r} contains null or blank values.")
 
-    invalid_ine_codes = ~normalized["ine_code"].str.fullmatch(r"\d{5}")
-    invalid_cnig_codes = ~normalized["cnig_national_code"].str.fullmatch(r"\d{11}")
-    if invalid_ine_codes.any():
-        raise ValueError("CNIG ine_code values must contain exactly five digits.")
-    if invalid_cnig_codes.any():
-        raise ValueError("CNIG national codes must contain exactly eleven digits.")
-    if not normalized["cnig_national_code"].str[-5:].eq(normalized["ine_code"]).all():
-        raise ValueError("CNIG national codes must end with the corresponding ine_code.")
+    reasons = normalized.get(
+        "_failure_reason",
+        pd.Series(pd.NA, index=normalized.index, dtype="string"),
+    ).astype("string").fillna("")
+    geometry_parse_failed = reasons.isin(
+        {"Missing geometry", "Invalid GeoJSON geometry"}
+    )
 
-    normalized = normalized.loc[
-        normalized["ine_code"].str[:2].isin(ANDALUSIA_PROVINCE_CODES)
-    ].copy()
-    if normalized.empty:
+    def add_failure(mask: pd.Series, reason: str) -> None:
+        failed_rows = mask.fillna(False)
+        previous = reasons.loc[failed_rows]
+        reasons.loc[failed_rows] = previous.mask(
+            previous.eq(""),
+            reason,
+        ).where(previous.eq(""), previous + "; " + reason)
+
+    missing_values = {
+        column: normalized[column].isna() | normalized[column].eq("")
+        for column in ("cnig_national_code", "cnig_name", "ine_code")
+    }
+    valid_ine_codes = (
+        ~missing_values["ine_code"]
+        & normalized["ine_code"].str.fullmatch(r"\d{5}").fillna(False)
+    )
+    out_of_scope = (
+        valid_ine_codes
+        & ~normalized["ine_code"].str[:2].isin(ANDALUSIA_PROVINCE_CODES)
+    )
+    in_scope = ~out_of_scope
+
+    for column, missing in missing_values.items():
+        add_failure(in_scope & missing, f"Missing required value: {column}")
+
+    invalid_ine_codes = ~normalized["ine_code"].str.fullmatch(r"\d{5}").fillna(False)
+    invalid_cnig_codes = (
+        ~normalized["cnig_national_code"].str.fullmatch(r"\d{11}").fillna(False)
+    )
+    add_failure(
+        in_scope & ~missing_values["ine_code"] & invalid_ine_codes,
+        "Invalid municipality code format; expected five digits",
+    )
+    add_failure(
+        in_scope & ~missing_values["cnig_national_code"] & invalid_cnig_codes,
+        "Invalid CNIG national code format; expected eleven digits",
+    )
+    valid_codes = (
+        ~missing_values["ine_code"]
+        & ~missing_values["cnig_national_code"]
+        & ~invalid_ine_codes
+        & ~invalid_cnig_codes
+    )
+    mismatched_codes = valid_codes & ~normalized["cnig_national_code"].str[-5:].eq(
+        normalized["ine_code"]
+    )
+    add_failure(
+        in_scope & mismatched_codes,
+        "CNIG national code does not end with municipality code",
+    )
+
+    if not in_scope.any():
         raise ValueError("CNIG source contains no Andalusian municipalities.")
 
-    invalid_geometries = (
-        normalized.geometry.isna()
-        | normalized.geometry.is_empty
-        | ~normalized.geometry.is_valid
+    geometry = normalized.geometry
+    missing_geometry = geometry.isna() & ~geometry_parse_failed
+    empty_geometry = geometry.is_empty.fillna(False)
+    invalid_geometry = ~geometry.is_valid.fillna(False) & geometry.notna()
+    wrong_geometry_type = (
+        geometry.notna()
+        & ~empty_geometry
+        & geometry.geom_type.ne("MultiPolygon").fillna(True)
     )
-    if invalid_geometries.any():
-        codes = normalized.loc[invalid_geometries, "ine_code"].tolist()
-        raise ValueError(f"CNIG contains null, empty, or invalid geometries: {codes[:10]}")
-    if not normalized.geometry.geom_type.eq("MultiPolygon").all():
-        raise ValueError("All CNIG municipality geometries must be MultiPolygon.")
+    add_failure(in_scope & missing_geometry, "Missing geometry")
+    add_failure(in_scope & empty_geometry, "Empty geometry")
+    add_failure(in_scope & invalid_geometry, "Invalid geometry")
+    add_failure(
+        in_scope & wrong_geometry_type,
+        "Geometry type is not MultiPolygon",
+    )
 
-    normalized = normalized.rename(
+    eligible = normalized.loc[in_scope].copy()
+    eligible["_failure_reason"] = reasons.loc[in_scope]
+    quality_valid = eligible["_failure_reason"].eq("")
+    geometry_wkb = eligible.loc[quality_valid].geometry.to_wkb()
+    duplicate_records = eligible.loc[quality_valid].assign(
+        _geometry_wkb=geometry_wkb
+    )
+    duplicate_mask = duplicate_records.duplicated(
+        subset=[
+            "ine_code",
+            "cnig_national_code",
+            "cnig_name",
+            "_geometry_wkb",
+        ],
+        keep="first",
+    )
+    duplicate_indices = duplicate_records.index[duplicate_mask]
+    eligible.loc[duplicate_indices, "_failure_reason"] = "Exact duplicate record"
+
+    unique_valid = eligible.loc[eligible["_failure_reason"].eq("")]
+    conflicting_codes = unique_valid.loc[
+        unique_valid["ine_code"].duplicated(keep=False),
+        "ine_code",
+    ].unique()
+    conflicting_rows = (
+        eligible["ine_code"].isin(conflicting_codes)
+        & eligible["_failure_reason"].eq("")
+    )
+    if conflicting_rows.any():
+        previous = eligible.loc[conflicting_rows, "_failure_reason"]
+        eligible.loc[conflicting_rows, "_failure_reason"] = previous.mask(
+            previous.eq(""),
+            "Conflicting duplicate municipality code",
+        ).where(
+            previous.eq(""),
+            previous + "; Conflicting duplicate municipality code",
+        )
+
+    rejected = eligible.loc[eligible["_failure_reason"].ne("")].copy()
+    rejected = rejected.drop(
+        columns=["_failure_reason", "_geometry_wkb"],
+        errors="ignore",
+    )
+    rejected[FAILURE_COLUMN] = eligible.loc[
+        eligible["_failure_reason"].ne(""),
+        "_failure_reason",
+    ]
+    if "source" not in rejected.columns:
+        rejected["source"] = SOURCE_NAME
+
+    silver = eligible.loc[eligible["_failure_reason"].eq("")].copy()
+    silver = silver.rename(
         columns={
             "ine_code": "municipality_code",
             "cnig_name": "municipality_name",
         }
     )
-    normalized["_geometry_wkb"] = normalized.geometry.to_wkb()
-    normalized = normalized.drop_duplicates(
-        subset=[
-            "municipality_code",
-            "cnig_national_code",
-            "municipality_name",
-            "_geometry_wkb",
-        ]
-    ).drop(columns="_geometry_wkb")
-    duplicate_codes = normalized["municipality_code"].duplicated(keep=False)
-    if duplicate_codes.any():
-        codes = normalized.loc[duplicate_codes, "municipality_code"].tolist()
-        raise ValueError(f"Conflicting duplicate municipality codes found: {codes[:10]}")
+    silver = silver.drop(columns="_failure_reason", errors="ignore")
 
     timestamp = pd.to_datetime(
         datetime.now(timezone.utc) if loaded_at_utc is None else loaded_at_utc,
         utc=True,
     )
-    normalized["source"] = SOURCE_NAME
-    normalized["loaded_at_utc"] = timestamp
-    return normalized.loc[:, OUTPUT_COLUMNS].sort_values(
+    silver["source"] = SOURCE_NAME
+    silver["loaded_at_utc"] = timestamp
+    silver = silver.loc[:, OUTPUT_COLUMNS].sort_values(
         "municipality_code",
         kind="stable",
     ).reset_index(drop=True)
+    if failed_output_path is not None:
+        failed_path = Path(failed_output_path)
+        failed_path.parent.mkdir(parents=True, exist_ok=True)
+        rejected.to_parquet(failed_path, index=False)
+    LOGGER.info(
+        "Validated %s municipality boundaries; rejected %s rows.",
+        len(silver),
+        len(rejected),
+    )
+    return silver
 
 
 def cnig_csv_to_geodataframe(raw_boundaries: pd.DataFrame) -> gpd.GeoDataFrame:
@@ -121,17 +222,36 @@ def cnig_csv_to_geodataframe(raw_boundaries: pd.DataFrame) -> gpd.GeoDataFrame:
     if missing_columns:
         raise ValueError(f"Missing required CNIG CSV columns: {missing_columns}")
 
-    national_codes = raw_boundaries["nationalCode"].astype("string").str.strip()
-    geometries = raw_boundaries["geometry"].map(
-        lambda value: shape(json.loads(value)) if value.strip() else None
-    )
+    source_rows = raw_boundaries.copy().reset_index(drop=True)
+    geometry_values = source_rows["geometry"].astype("string").str.strip()
+    parsed_geometries = []
+    parse_reasons = pd.Series("", index=source_rows.index, dtype="string")
+    for row_index, value in geometry_values.items():
+        if pd.isna(value) or value == "":
+            parsed_geometries.append(None)
+            parse_reasons.loc[row_index] = "Missing geometry"
+            continue
+        try:
+            geojson_geometry = json.loads(value)
+            if geojson_geometry is None:
+                parsed_geometries.append(None)
+                parse_reasons.loc[row_index] = "Missing geometry"
+            else:
+                parsed_geometries.append(shape(geojson_geometry))
+        except (json.JSONDecodeError, TypeError, ValueError, AttributeError):
+            parsed_geometries.append(None)
+            parse_reasons.loc[row_index] = "Invalid GeoJSON geometry"
+
+    source_rows["geometry_raw"] = geometry_values
+    source_rows = source_rows.drop(columns="geometry")
+    national_codes = source_rows["nationalCode"].astype("string").str.strip()
+    source_rows["cnig_national_code"] = national_codes
+    source_rows["cnig_name"] = source_rows["name"].astype("string").str.strip()
+    source_rows["ine_code"] = national_codes.str[-5:]
+    source_rows["_failure_reason"] = parse_reasons
     return gpd.GeoDataFrame(
-        {
-            "cnig_national_code": national_codes,
-            "cnig_name": raw_boundaries["name"].astype("string").str.strip(),
-            "ine_code": national_codes.str[-5:],
-        },
-        geometry=geometries,
+        source_rows,
+        geometry=parsed_geometries,
         crs="EPSG:4326",
     )
 
@@ -139,12 +259,18 @@ def cnig_csv_to_geodataframe(raw_boundaries: pd.DataFrame) -> gpd.GeoDataFrame:
 def clean_municipality_boundaries_from_csv(
     source_csv_path: Path = MUNICIPALITY_BOUNDARIES_BRONZE_PATH,
     output_path: Path = MUNICIPALITY_BOUNDARIES_SILVER_PATH,
+    failed_output_path: Path | None = MUNICIPALITY_BOUNDARIES_FAILED_PATH,
 ) -> Path:
     """Read CNIG's raw CSV and create a local Silver GeoParquet."""
     source_csv_path = Path(source_csv_path)
     output_path = Path(output_path)
     if source_csv_path.resolve() == output_path.resolve():
         raise ValueError("The raw CSV and processed Parquet paths must be different.")
+    if failed_output_path is not None and Path(failed_output_path).resolve() in {
+        source_csv_path.resolve(),
+        output_path.resolve(),
+    }:
+        raise ValueError("The rejected output path must differ from raw and Silver paths.")
 
     raw_boundaries = pd.read_csv(
         source_csv_path,
@@ -152,7 +278,10 @@ def clean_municipality_boundaries_from_csv(
         keep_default_na=False,
     )
     source_boundaries = cnig_csv_to_geodataframe(raw_boundaries)
-    silver_boundaries = clean_municipality_boundaries(source_boundaries)
+    silver_boundaries = clean_municipality_boundaries(
+        source_boundaries,
+        failed_output_path=failed_output_path,
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     silver_boundaries.to_parquet(
         output_path,
