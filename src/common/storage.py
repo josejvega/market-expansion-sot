@@ -44,7 +44,7 @@ def get_storage_settings() -> StorageSettings:
     load_dotenv(PROJECT_ROOT / ".env", override=False)
     return StorageSettings(
         save_locally=_read_bool_setting("SAVE_LOCALLY", True),
-        save_s3=_read_bool_setting("SAVE_S3", False),
+        save_s3=_read_bool_setting("SAVE_S3", True),
         bucket_name=os.getenv("S3_BUCKET") or None,
         region_name=os.getenv("AWS_DEFAULT_REGION") or None,
     )
