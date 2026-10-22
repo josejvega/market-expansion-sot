@@ -9,10 +9,94 @@ import numpy as np
 import pandas as pd
 
 from src.negocio import ejecutar
-from src.negocio.valor_negocio import competidores_ponderados, evaluar, top5_baseline, top5_modelo
+from src.negocio.valor_negocio import (
+    competidores_ponderados, evaluar, top5_diversificado_clusters,
+    top5_facturacion, top5_modelo,
+)
 
 
 class BusinessIntegrationTests(unittest.TestCase):
+    def test_business_report_has_readable_baseline_model_comparison(self):
+        central = pd.DataFrame({
+            "municipality_code": ["00001", "00002", "00003", "00004", "00005"],
+            "municipality_name": ["A", "B", "C", "D", "E"],
+            "population_18_50": [10000] * 5,
+            "population_growth_pct": [1.0, -0.5, 3.0, 8.0, -2.0],
+            "mean_net_income_per_person": [11000, 12000, 13000, 11500, 12500],
+            "cluster": [0, 0, 1, 2, 3],
+            "competidores_pond": [1] * 5,
+            "comp_per_10k_18_50": [1] * 5,
+            "media_cluster_comp_per_10k": [2] * 5,
+            "socios_captables": [2600] * 5,
+            "facturacion_sin_tope_capacidad": [700000] * 5,
+            "ratio_capacidad": [1] * 5,
+            "colchon_demanda_pct": [0.1] * 5,
+            "facturacion_anual": [600000] * 5,
+            "margen_eur": [44000] * 5,
+            "perdidas_eur": [0] * 5,
+            "demanda_por_comp": [100] * 5,
+            "viable": [True] * 5,
+            "candidate_flag": [True] * 5,
+            "socios_break_even": [2071.23] * 5,
+            "umbral_facturacion": [556000] * 5,
+            "aviso_calidad": [""] * 5,
+        })
+        diversificada = central.assign(
+            posicion=range(1, 6), motivo_seleccion="mejor_candidato_viable_del_cluster"
+        )
+        diversificada.attrs["cluster_sin_candidato_viable"] = []
+        selecciones = {
+            "baseline": central,
+            "maxima_facturacion": central,
+            "modelo_a": central,
+            "diversificada": diversificada,
+        }
+        frecuencias = pd.DataFrame({
+            "municipality_code": central.municipality_code,
+            "municipality_name": central.municipality_name,
+            "apariciones": [4] * 5,
+            "posicion_media": [1.0] * 5,
+            "fact_min": [500000] * 5,
+            "fact_max": [600000] * 5,
+            "robustez": ["4 de 10"] * 5,
+            "aviso_calidad": [""] * 5,
+        })
+        report = ejecutar.crear_reporte(
+            selecciones, central, frecuencias, {"capacidad": 2600}
+        )
+        comparison = ejecutar.crear_comparacion_estrategias(selecciones)
+
+        self.assertEqual(
+            sum(line.startswith("| ---") for line in report.splitlines()), 7
+        )
+        self.assertIn("Máxima facturación sin clusters", report)
+        self.assertIn("Modelo A oficial", report)
+        self.assertIn("Alternativa diversificada por clusters", report)
+        self.assertIn("Estado provisional y perfil de clusters", report)
+        self.assertIn("Población 18-50 mediana", report)
+        self.assertIn("Candidatos viables", report)
+        self.assertIn("Lectura de perfiles:", report)
+        for cluster in range(4):
+            self.assertIn(f"- Cluster {cluster}:", report)
+        self.assertIn("no son probabilidades", report)
+        self.assertIn("potencial teórico sin límite de capacidad", report.lower())
+        self.assertEqual(len(comparison), 4)
+        self.assertIn("cluster_sin_candidato_viable", comparison.columns)
+
+    def test_t5_cleanup_preserves_unmanaged_outputs(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            old_t5 = root / "baseline_solo_gimnasios.csv"
+            unrelated = root / "evaluacion_clusters.csv"
+            old_t5.write_text("old", encoding="utf-8")
+            unrelated.write_text("keep", encoding="utf-8")
+
+            removed = ejecutar.limpiar_salidas_t5(root)
+
+            self.assertIn(old_t5.name, removed)
+            self.assertFalse(old_t5.exists())
+            self.assertEqual(unrelated.read_text(encoding="utf-8"), "keep")
+
     def test_gold_competition_matches_agreed_weights_and_legacy_schema(self):
         gold = pd.DataFrame({
             "population_18_50": [10000, 20000],
@@ -33,6 +117,10 @@ class BusinessIntegrationTests(unittest.TestCase):
                 pd.testing.assert_series_equal(actual[column], expected[column])
         central = competidores_ponderados(gold)
         self.assertEqual(central.competidores_pond.tolist(), [3.0, 0.5])
+        self.assertEqual(
+            central.aviso_calidad.tolist(),
+            ["", "Sin gimnasios en OSM: validar con una segunda fuente"],
+        )
         with self.assertRaisesRegex(ValueError, "pesos distintos"):
             competidores_ponderados(gold, {
                 "fitness_centre": 1, "sports_centre": 0.1, "fitness_station": 0,
@@ -91,18 +179,97 @@ class BusinessIntegrationTests(unittest.TestCase):
         self.assertEqual(evaluated.candidate_flag.tolist(), [True, False, True])
         self.assertEqual(top5_modelo(evaluated).municipality_code.tolist(), ["04001"])
 
-    def test_baseline_selects_top_five_target_population_with_code_tiebreak(self):
-        evaluated = pd.DataFrame({
-            "municipality_code": ["00006", "00001", "00002", "00003", "00004", "00005"],
-            "population_18_50": [100, 100, 500, 400, 300, 200],
+    def test_economic_selections_use_municipality_code_as_final_tiebreaker(self):
+        rows = pd.DataFrame({
+            "municipality_code": ["00005", "00003", "00001", "00006", "00002", "00004"],
+            "facturacion_anual": [100] * 6,
+            "facturacion_sin_tope_capacidad": [100] * 6,
+            "demanda_por_comp": [10] * 6,
+            "population_18_50": [1000] * 6,
+            "candidate_flag": [True] * 6,
+            "viable": [True] * 6,
         })
 
-        baseline = top5_baseline(evaluated)
+        actual = top5_facturacion(rows).municipality_code.tolist()
 
+        self.assertEqual(actual, ["00001", "00002", "00003", "00004", "00005"])
+
+    def test_diversified_selection_uses_cluster_winners_then_one_repeat(self):
+        rows = pd.DataFrame({
+            "municipality_code": ["00001", "00002", "00003", "00004", "00005", "00006"],
+            "municipality_name": ["A", "A2", "B", "C", "D", "D2"],
+            "cluster": [0, 0, 1, 2, 3, 3],
+            "facturacion_anual": [100, 99, 95, 80, 70, 69],
+            "facturacion_sin_tope_capacidad": [100, 99, 95, 80, 70, 69],
+            "demanda_por_comp": [10, 9, 8, 7, 6, 5],
+            "population_18_50": [1000] * 6,
+            "candidate_flag": [True] * 6,
+            "viable": [True] * 6,
+        })
+
+        actual = top5_diversificado_clusters(rows)
+
+        self.assertEqual(actual.municipality_code.tolist(), [
+            "00001", "00003", "00004", "00005", "00002",
+        ])
+        self.assertEqual(actual.cluster.value_counts().max(), 2)
+        self.assertEqual(actual.cluster.value_counts().eq(2).sum(), 1)
+        self.assertEqual(actual.posicion.tolist(), [1, 2, 3, 4, 5])
+        self.assertEqual(actual.motivo_seleccion.tolist(), [
+            "mejor_candidato_viable_del_cluster",
+            "mejor_candidato_viable_del_cluster",
+            "mejor_candidato_viable_del_cluster",
+            "mejor_candidato_viable_del_cluster",
+            "unica_repeticion_mejor_restante",
+        ])
+
+    def test_diversified_selection_repeats_only_one_cluster_without_relaxing_filters(self):
+        rows = pd.DataFrame({
+            "municipality_code": [
+                "00001", "00002", "00003", "00004", "00005", "00006", "00007",
+            ],
+            "cluster": [0, 0, 1, 1, 2, 3, 3],
+            "facturacion_anual": [100, 90, 80, 70, 999, 60, 50],
+            "facturacion_sin_tope_capacidad": [100, 90, 80, 70, 999, 60, 50],
+            "demanda_por_comp": [10, 9, 8, 7, 100, 6, 5],
+            "population_18_50": [1000] * 7,
+            "candidate_flag": [True, True, True, True, False, True, True],
+            "viable": [True] * 7,
+        })
+
+        actual = top5_diversificado_clusters(rows)
+
+        self.assertEqual(actual.attrs["cluster_sin_candidato_viable"], [2])
+        self.assertEqual(actual.municipality_code.tolist(), [
+            "00001", "00003", "00006", "00002",
+        ])
+        self.assertNotIn("00005", actual.municipality_code.tolist())
         self.assertEqual(
-            baseline["municipality_code"].tolist(),
-            ["00002", "00003", "00004", "00005", "00001"],
+            actual.motivo_seleccion.tolist()[3],
+            "unica_repeticion_mejor_restante",
         )
+        self.assertEqual(actual.cluster.value_counts().max(), 2)
+        self.assertEqual(actual.cluster.value_counts().eq(2).sum(), 1)
+        self.assertEqual(actual.municipality_code.nunique(), len(actual))
+
+    def test_diversified_selection_returns_three_when_only_two_clusters_are_viable(self):
+        rows = pd.DataFrame({
+            "municipality_code": ["00001", "00002", "00003", "00004", "00005"],
+            "cluster": [0, 1, 2, 2, 3],
+            "facturacion_anual": [100, 90, 80, 70, 60],
+            "facturacion_sin_tope_capacidad": [100, 90, 80, 70, 60],
+            "demanda_por_comp": [10, 9, 8, 7, 6],
+            "population_18_50": [1000] * 5,
+            "candidate_flag": [True] * 5,
+            "viable": [False, True, True, True, False],
+        })
+
+        actual = top5_diversificado_clusters(rows)
+
+        self.assertEqual(actual.municipality_code.tolist(), ["00002", "00003", "00004"])
+        self.assertEqual(actual.cluster.value_counts().to_dict(), {2: 2, 1: 1})
+        self.assertEqual(actual.attrs["cluster_sin_candidato_viable"], [0, 3])
+        self.assertTrue((actual.candidate_flag & actual.viable).all())
 
 
 if __name__ == "__main__":
