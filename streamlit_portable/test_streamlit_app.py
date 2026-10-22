@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
@@ -68,9 +69,21 @@ class OriginalExportDashboardTests(unittest.TestCase):
         self.assertIn("tab-intelligence", html)
         self.assertIn("tab-decision", html)
         self.assertIn("renderGoldDashboard", html)
+        self.assertIn("background:#faf9fc!important", html)
+        self.assertIn("color:#17151b!important", html)
         self.assertIn("source_type", html)
         self.assertNotIn("__DATA__", html)
         self.assertNotIn("__MARKET__", html)
+
+    def test_streamlit_theme_is_explicitly_light(self) -> None:
+        config_path = Path(__file__).resolve().parents[1] / ".streamlit" / "config.toml"
+
+        self.assertEqual(
+            config_path.read_text(encoding="utf-8"),
+            '[theme]\nbase = "light"\nprimaryColor = "#a100ff"\n'
+            'backgroundColor = "#faf9fc"\nsecondaryBackgroundColor = "#ffffff"\n'
+            'textColor = "#17151b"\n',
+        )
 
 
 if __name__ == "__main__":

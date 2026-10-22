@@ -226,6 +226,12 @@ def render_study(study: dict) -> str:
     )
 
     styles = (APP_DIR / "web" / "streamlit.css").read_text(encoding="utf-8")
+    styles += (
+        "\n:root{color-scheme:light!important;--ink:#17151b;"
+        "--muted:#66616c;--paper:#faf9fc}"
+        "html,body{background:#faf9fc!important;background-color:#faf9fc!important;"
+        "color:#17151b!important;color-scheme:light!important}"
+    )
     payload = (
         json.dumps(study, ensure_ascii=True, allow_nan=False)
         .replace("<", "\\u003c")
@@ -290,11 +296,12 @@ def main() -> None:
     st.markdown(
         """<style>
 html,body,[data-testid=stAppViewContainer],[data-testid=stMain]{overflow:hidden}
+html,body,[data-testid=stAppViewContainer],[data-testid=stMain]{background:#faf9fc!important;color:#17151b!important;color-scheme:light!important}
 .block-container{padding:0!important;max-width:none!important}
 [data-testid=stHeader],footer{display:none}
 [data-testid=stMainBlockContainer]>[data-testid=stVerticalBlock]{gap:0}
-iframe[title="st.iframe"]{height:100dvh;width:100%;border:0;display:block}
-</style>""",
+iframe[title="st.iframe"]{height:100dvh;width:100%;border:0;display:block;background:#faf9fc!important;color-scheme:light!important}
+  </style>""",
         unsafe_allow_html=True,
     )
     components.html(html, height=1000, scrolling=True)
