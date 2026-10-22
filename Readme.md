@@ -85,3 +85,15 @@ network access to the data sources, and AWS permissions for the configured S3
 bucket. Prefer an EC2 instance role for AWS credentials; boto3 uses its standard
 credential chain. Configure the storage variables in `.env` or in the process
 environment before running the command.
+
+## Municipality clustering
+
+Run `notebooks/03_modelo.ipynb` interactively after Gold has been generated.
+It loads Gold locally or from S3, excludes and reports municipalities with
+missing clustering variables, and plots inertia and silhouette scores. Choose
+`N_CLUSTERS` based on those plots. An interactive pairwise chart shows all
+clusters across the three standardized input variables. Its `asinh` display
+scale compresses extreme values without dropping municipalities; hover over a
+point to see the original standardized values, municipality, and province. The
+remaining cells list municipalities whose weighted competitor rate is below
+their cluster mean.

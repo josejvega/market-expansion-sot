@@ -6,3 +6,6 @@ boto3>=1.42,<2
 python-dotenv
 geopandas==1.0.1
 pyarrow==21.0.0
+scikit-learn>=1.5,<2
+matplotlib>=3.8,<4
+plotly>=5.24,<7
