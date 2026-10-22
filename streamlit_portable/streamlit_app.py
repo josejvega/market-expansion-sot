@@ -40,7 +40,7 @@ def build_study(
     weight_scenario: str = "central",
     revenue_rule: str = "C",
 ) -> dict:
-    """Adapt repository Gold and business results to the original export UI."""
+    """Adapt repository Gold and Silver data to the portable2 dashboard."""
     analysis = evaluar(
         municipalities,
         escenario=scenario,
@@ -94,7 +94,16 @@ def build_study(
             "Los datos de Gold no incluyen auditorías de mercado, turismo ni secciones censales.",
             "La facturación y la viabilidad son escenarios basados en supuestos, no predicciones.",
         ],
-        "sources": [{"label": f"Gold procesada · {gold_source}", "url": None}],
+        "sources": [
+            {"label": f"Gold procesada · {gold_source}", "url": None},
+            {
+                "label": (
+                    "Límites municipales Silver · processed/silver/"
+                    "limites_municipales_andalucia.parquet"
+                ),
+                "url": None,
+            },
+        ],
     }
 
     records = []
@@ -144,24 +153,18 @@ def build_study(
                     "Recuento de instalaciones de Gold; no verifica la ausencia "
                     "de competencia."
                 ),
-                "gyms_count": int(row["gyms_count"]),
-                "other_sports_facilities_count": int(
-                    row["other_sports_facilities_count"]
-                ),
             }
         )
 
     return {
-        "source_type": "gold",
+        "schema_version": 1,
         "metadata": metadata,
         "municipalities": records,
         "selection": selection["municipality_code"].astype(str).tolist(),
         "baseline": baseline["municipality_code"].astype(str).tolist(),
         "competitors": [],
         "audit": [],
-        "clusters_available": has_clusters,
-        "scenario": scenario,
-        "revenue_rule": revenue_rule,
+        "market_checks": [],
     }
 
 
@@ -197,26 +200,21 @@ def render_study(study: dict) -> str:
             x="income_eur",
             y="growth_pct",
             size="target_population",
-            color="cluster" if study["clusters_available"] else "province",
             hover_name="name",
-            hover_data=[
-                "province",
-                "gyms_count",
-                "other_sports_facilities_count",
-            ],
             size_max=34,
             labels={
                 "income_eur": "Renta neta anual por persona (EUR)",
-                "growth_pct": "Crecimiento de población (%)",
-                "target_population": "Público objetivo 18–50",
-                "province": "Provincia",
-                "cluster": "Cluster",
+                "growth_pct": "Crecimiento de poblacion en 5 anos (%)",
+                "target_population": "Publico objetivo",
             },
         )
-        marker_style = {"opacity": 0.65, "line": {"width": 1, "color": "white"}}
-        if not study["clusters_available"]:
-            marker_style["color"] = "#2976ad"
-        market.update_traces(marker=marker_style)
+        market.update_traces(
+            marker={
+                "color": "#2976ad",
+                "opacity": 0.65,
+                "line": {"width": 1, "color": "white"},
+            }
+        )
         market.add_hline(y=0, line_dash="dot", line_color="#96909c")
     market_html = chart_style(market, 390).to_html(
         full_html=False,
@@ -226,12 +224,6 @@ def render_study(study: dict) -> str:
     )
 
     styles = (APP_DIR / "web" / "streamlit.css").read_text(encoding="utf-8")
-    styles += (
-        "\n:root{color-scheme:light!important;--ink:#17151b;"
-        "--muted:#66616c;--paper:#faf9fc}"
-        "html,body{background:#faf9fc!important;background-color:#faf9fc!important;"
-        "color:#17151b!important;color-scheme:light!important}"
-    )
     payload = (
         json.dumps(study, ensure_ascii=True, allow_nan=False)
         .replace("<", "\\u003c")
@@ -239,14 +231,13 @@ def render_study(study: dict) -> str:
         .replace("&", "\\u0026")
     )
     template = (APP_DIR / "web" / "streamlit.html").read_text(encoding="utf-8")
-    gold_renderer = (APP_DIR / "web" / "streamlit_gold.js").read_text(
+    analysis = (APP_DIR / "web" / "streamlit_analysis.js").read_text(
         encoding="utf-8"
     )
     return (
         template.replace("__STYLES__", styles)
         .replace("__MARKET__", market_html)
-        .replace("__GOLD_RENDERER__", gold_renderer)
-        .replace("__ANALYSIS__", "")
+        .replace("__ANALYSIS__", analysis)
         .replace("__DATA__", payload)
     )
 
@@ -296,12 +287,11 @@ def main() -> None:
     st.markdown(
         """<style>
 html,body,[data-testid=stAppViewContainer],[data-testid=stMain]{overflow:hidden}
-html,body,[data-testid=stAppViewContainer],[data-testid=stMain]{background:#faf9fc!important;color:#17151b!important;color-scheme:light!important}
 .block-container{padding:0!important;max-width:none!important}
 [data-testid=stHeader],footer{display:none}
 [data-testid=stMainBlockContainer]>[data-testid=stVerticalBlock]{gap:0}
-iframe[title="st.iframe"]{height:100dvh;width:100%;border:0;display:block;background:#faf9fc!important;color-scheme:light!important}
-  </style>""",
+iframe[title="st.iframe"]{height:100dvh;width:100%;border:0;display:block}
+</style>""",
         unsafe_allow_html=True,
     )
     components.html(html, height=1000, scrolling=True)

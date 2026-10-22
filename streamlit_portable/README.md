@@ -1,7 +1,7 @@
-# Streamlit · export original con datos del repositorio
+# Streamlit · interfaz portable2 con datos del repositorio
 
-La app conserva la interfaz original del export (`web/streamlit.html` y sus
-estilos) y lee primero la tabla procesada
+La app usa la interfaz de `streamlit_portable2` (`web/streamlit.html`, CSS y
+JavaScript) y lee la tabla procesada
 `gold/tabla_oro_municipios_andalucia.parquet` del bucket configurado con
 `S3_BUCKET` en el `.env` de la raíz del repo. También lee los polígonos
 municipales Silver desde
@@ -56,7 +56,7 @@ entre sistemas; en ese caso conviene generarlo como artefacto a partir de Gold,
 no como copia mantenida a mano.
 
 La app usa los mismos cálculos y supuestos de `src/negocio/valor_negocio.py`.
-La interfaz original incluía campos que Gold no tiene. Las coordenadas se
+La interfaz portable2 incluye campos que Gold no tiene. Las coordenadas se
 calculan a partir de los polígonos municipales Silver; el punto representativo
 solo localiza el municipio, no una ubicación de gimnasio. Los datos turísticos,
 secciones censales, auditorías e intervalos de ingresos siguen sin estar
