@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+data
+tests/*
+!tests/test_modelo.py
+!tests/test_run.py
+!tests/test_tabla_calidad.py
+!tests/test_tabla_municipios_dudosos.py
+!tests/test_tabla_oro.py
