@@ -21,6 +21,7 @@ EXPECTED_MUNICIPALITIES = 785
 MIN_CLUSTER_SIZE = 30
 RANDOM_STATE = 42
 N_INIT = 20
+MIN_K = 2
 FEATURE_COLUMNS = [
     "population_18_50",
     "population_growth_pct",
@@ -44,6 +45,20 @@ class ModelResult:
     imputed_municipalities: list[str]
 
 
+def max_evaluable_k(
+    n_municipalities: int,
+    min_cluster_size: int | None = None,
+) -> int:
+    """Return the largest k compatible with the minimum cluster size."""
+    if min_cluster_size is None:
+        min_cluster_size = MIN_CLUSTER_SIZE
+    if n_municipalities < 1:
+        raise ValueError("The number of municipalities must be positive.")
+    if min_cluster_size < 1:
+        raise ValueError("The minimum cluster size must be positive.")
+    return n_municipalities // min_cluster_size
+
+
 def _validate_codes(table: pd.DataFrame) -> pd.Series:
     if "municipality_code" not in table.columns:
         raise ValueError("Missing municipality_code column.")
@@ -60,13 +75,20 @@ def _validate_codes(table: pd.DataFrame) -> pd.Series:
 
 
 def train_model(gold: pd.DataFrame) -> ModelResult:
-    """Select k=2..6 by silhouette, subject to a 30-municipality minimum."""
+    """Select the best eligible k by silhouette."""
     _validate_codes(gold)
     missing_columns = sorted(set(FEATURE_COLUMNS).difference(gold.columns))
     if missing_columns:
         raise ValueError(f"Missing model feature columns: {missing_columns}")
 
     ordered = gold.sort_values("municipality_code", kind="stable").reset_index(drop=True)
+    max_k = max_evaluable_k(len(ordered))
+    k_values = range(MIN_K, max_k + 1)
+    if max_k < MIN_K:
+        raise ValueError(
+            f"No k in {MIN_K}..{max_k} satisfies the minimum of "
+            f"{MIN_CLUSTER_SIZE} municipalities per cluster."
+        )
     features = ordered.loc[:, FEATURE_COLUMNS].apply(
         pd.to_numeric, errors="raise"
     ).astype("float64")
@@ -100,12 +122,15 @@ def train_model(gold: pd.DataFrame) -> ModelResult:
     transformed.columns = TRANSFORMED_FEATURES
     scaler = StandardScaler()
     scaled = scaler.fit_transform(transformed)
-    if len(np.unique(scaled, axis=0)) < 6:
-        raise ValueError("At least six distinct feature vectors are required to evaluate k=2..6.")
+    if len(np.unique(scaled, axis=0)) < max_k:
+        raise ValueError(
+            f"At least {max_k} distinct feature vectors are required to evaluate "
+            f"k={MIN_K}..{max_k}."
+        )
 
     models: dict[int, KMeans] = {}
     rows = []
-    for k in range(2, 7):
+    for k in k_values:
         model = KMeans(n_clusters=k, random_state=RANDOM_STATE, n_init=N_INIT)
         labels = model.fit_predict(scaled)
         sizes = np.bincount(labels, minlength=k)
@@ -127,7 +152,7 @@ def train_model(gold: pd.DataFrame) -> ModelResult:
     )
     if eligible.empty:
         raise ValueError(
-            "No k in 2..6 satisfies the minimum of "
+            f"No k in {MIN_K}..{max_k} satisfies the minimum of "
             f"{MIN_CLUSTER_SIZE} municipalities per cluster.\n"
             + evaluation.to_string(index=False)
         )

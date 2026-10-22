@@ -59,11 +59,23 @@ Estas reglas hacen que un resultado numérico no oculte problemas de calidad de 
 
 ## Selección de k
 
-El modelo prueba automáticamente:
+El modelo prueba automáticamente un rango calculado a partir del tamaño de la Gold:
 
 ```text
-k = 2, 3, 4, 5, 6
+max_k = numero_de_municipios // tamano_minimo_de_cluster
+k = 2 .. max_k
 ```
+
+Con la Gold actual hay 785 municipios y el tamano minimo es 30, por lo que el
+maximo teorico del barrido es `k=26`: se obtiene como `785 // 30`. El valor 26
+no esta fijado en el codigo. Si cambia el universo o el tamano minimo, cambia
+automaticamente el rango.
+
+Este calculo solo establece cuantos clusters serian posibles en el caso ideal
+de repartir los municipios de forma equilibrada. Despues de entrenar cada k se
+comprueba el tamano real de todos sus clusters. En el primer experimento,
+`k=10` ya produjo un cluster de 29 municipios, por lo que las soluciones
+realmente elegibles fueron `k=2..9`.
 
 Para cada valor calcula:
 
@@ -74,6 +86,92 @@ Para cada valor calcula:
 - `eligible`.
 
 Una solución es elegible únicamente si todos sus clusters tienen al menos 30 municipios. Entre las soluciones elegibles se selecciona la de mayor silhouette. Si hay empate, se selecciona el menor `k`.
+
+El barrido hasta `max_k` sirve para explorar la curva completa. Para la
+decision de negocio tambien deben revisarse estabilidad, perfiles y resultados
+economicos, porque una solucion con muchos clusters puede cumplir el minimo
+matematico y seguir siendo dificil de interpretar.
+
+### Resultado del primer experimento
+
+Con la Gold actual se evaluaron 25 valores, de `k=2` a `k=26`. La restriccion
+de 30 municipios por cluster hizo elegibles las soluciones de `k=2` a `k=9`;
+desde `k=10` algun cluster baja de 30 municipios.
+
+El mejor valor de silhouette del experimento fue:
+
+```text
+k = 4
+silhouette = 0.290526
+min_cluster_size = 95
+```
+
+Por tanto, `k=4` es la recomendacion tecnica inicial por silhouette. No es aun
+la decision definitiva de negocio: la silhouette evalua cohesion y separacion
+geometrica, pero no mide facturacion, margen ni robustez de los municipios
+seleccionados.
+
+La conclusion queda pendiente de estos experimentos:
+
+1. estabilidad de los clusters con varias semillas;
+2. interpretacion de los perfiles en unidades de negocio;
+3. comparacion de la seleccion frente al baseline;
+4. facturacion y viabilidad bajo los mismos supuestos;
+5. sensibilidad de los municipios seleccionados ante cambios de supuestos.
+
+### Resultados de validacion del experimento
+
+La metodologia, el detalle de las metricas y el criterio de decision estan
+documentados en este fichero. Los CSV tecnicos generados por
+`src/modelo/experimentos.py` se analizan en los notebooks del proyecto.
+
+Se ejecuto `src/modelo/experimentos.py` sobre la Gold real. La estabilidad se
+midio con Adjusted Rand Index (ARI) frente a la asignacion de la semilla 42,
+usando las semillas `0, 1, 2, 3, 4 y 42`.
+
+Los ARI medios aproximados fueron:
+
+```text
+k=2  -> 0.997
+k=3  -> 0.990
+k=4  -> 0.976
+k=5  -> 0.671
+k=6  -> 0.990
+k=7  -> 0.891
+k=8  -> 0.869
+k=9  -> 0.786
+```
+
+`k=4` es razonablemente estable, aunque no es la solucion mas estable. `k=5`
+presenta una inestabilidad clara y `k=9` deja de ser elegible con algunas
+semillas porque algun cluster baja de 30 municipios.
+
+Con `k=4`, los perfiles medianos fueron:
+
+| Cluster | Municipios | Poblacion 18-50 | Crecimiento | Renta | Competencia por 10.000 |
+|---|---:|---:|---:|---:|---:|
+| 0 | 95 | 573 | 8,96 % | 11.674 | 0,87 |
+| 1 | 360 | 1.437 | -0,53 % | 11.399 | 1,75 |
+| 2 | 125 | 9.461 | 3,06 % | 13.167 | 1,52 |
+| 3 | 205 | 229 | -2,85 % | 12.749 | 3,12 |
+
+En el escenario central, todas las soluciones elegibles `k=2..9` produjeron
+los mismos agregados de negocio para la seleccion del modelo:
+
+```text
+Baseline: 2.649.735 EUR de facturacion, -130.265 EUR de margen, 3 viables
+Modelo:   3.489.720 EUR de facturacion,  709.720 EUR de margen, 5 viables
+```
+
+Esto indica que, con los supuestos actuales, el ranking final es poco sensible
+a la eleccion de `k` entre las soluciones elegibles. No demuestra que todos los
+municipios de las listas sean iguales; deben revisarse las listas concretas y
+los cambios frente al baseline.
+
+En la sensibilidad de 162 escenarios, los municipios con mas apariciones fueron
+Marbella (97), Alcala de Guadaira (93), El Puerto de Santa Maria (88),
+Fuengirola (71) y Algeciras (42). La frecuencia es una medida de robustez bajo
+los supuestos probados, no una validacion historica de rentabilidad.
 
 La silhouette ayuda a evaluar la estructura geométrica de los datos, pero no demuestra que una solución sea económicamente mejor. Por eso también hay que revisar tamaños de cluster, perfiles en unidades originales y estabilidad de la decisión.
 

@@ -10,6 +10,7 @@ import pandas as pd
 
 from src.modelo.modelo import (
     MIN_CLUSTER_SIZE,
+    max_evaluable_k,
     save_clusters,
     train_model,
 )
@@ -35,6 +36,14 @@ def gold_data() -> pd.DataFrame:
 
 
 class ModelTests(unittest.TestCase):
+    def test_max_evaluable_k_uses_municipality_count_and_minimum_size(self):
+        self.assertEqual(max_evaluable_k(785, 30), 26)
+        self.assertEqual(max_evaluable_k(785, 50), 15)
+        with self.assertRaisesRegex(ValueError, "positive"):
+            max_evaluable_k(0, 30)
+        with self.assertRaisesRegex(ValueError, "positive"):
+            max_evaluable_k(785, 0)
+
     def test_model_contract_selection_and_reproducibility(self) -> None:
         gold = gold_data()
         gold.loc[:1, "mean_net_income_per_person"] = np.nan
@@ -54,7 +63,7 @@ class ModelTests(unittest.TestCase):
         eligible = result.evaluation.loc[result.evaluation.eligible]
         selected = result.evaluation.loc[result.evaluation.selected].iloc[0]
         self.assertEqual(selected.silhouette, eligible.silhouette.max())
-        self.assertEqual(result.evaluation.k.tolist(), [2, 3, 4, 5, 6])
+        self.assertEqual(result.evaluation.k.tolist(), list(range(2, 27)))
         self.assertEqual(result.scaler.feature_names_in_.tolist(), [
             "log1p_population_18_50",
             "population_growth_pct",
@@ -86,7 +95,7 @@ class ModelTests(unittest.TestCase):
 
     def test_fails_if_no_cluster_solution_satisfies_minimum_size(self) -> None:
         with patch("src.modelo.modelo.MIN_CLUSTER_SIZE", 785):
-            with self.assertRaisesRegex(ValueError, "No k in 2..6"):
+            with self.assertRaisesRegex(ValueError, "No k in 2..1"):
                 train_model(gold_data())
 
     def test_csv_roundtrip_keeps_codes_and_only_two_columns(self) -> None:
