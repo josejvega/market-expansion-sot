@@ -13,9 +13,11 @@ copia local que pueda estar desactualizada. Si `S3_BUCKET` no está configurado,
 se leen las copias locales. No hace falta crear ni mantener un JSON intermedio.
 
 Si existe `data/resultados/clusters.csv` localmente, incorpora los clusters por
-código municipal. El módulo del modelo actual no los publica a S3. Sin ese
-archivo, la interfaz conserva su diseño y muestra el ranking viable de negocio
-y el baseline, sin fingir una selección de clusters.
+código municipal. Si no existe, entrena el modelo K-means del repositorio con
+la Gold recién cargada (incluida Gold leída desde S3). Así se calculan las
+candidatas reales del modelo y su ranking de negocio; no se sustituye por el
+top 5 de facturación general. El entrenamiento es determinista y usa las
+mismas reglas que `python -m src.modelo.modelo`.
 
 ## Preparar los datos y ejecutar
 
@@ -38,15 +40,16 @@ python -m streamlit run streamlit_portable/streamlit_app.py
 En EC2 no guardes claves AWS en `.env`: asocia a la instancia un IAM role
 (instance profile). boto3 obtendrá credenciales temporales de ese rol.
 
-Para incluir selección por clusters, ejecuta antes:
+Para guardar o revisar las asignaciones de clusters por separado:
 
 ```powershell
 python -m src.modelo.modelo
 ```
 
-También puede indicarse otra ubicación para Gold y clusters con
-`GYM_GOLD_PATH` y `GYM_CLUSTERS_PATH`. El CSV de clusters es opcional; Gold y
-los límites Silver son necesarios para cargar la app con su mapa.
+También puede indicarse otra ubicación para Gold y clusters locales con
+`GYM_GOLD_PATH` y `GYM_CLUSTERS_PATH`. Si no hay CSV local, la app genera los
+clusters desde la Gold que está usando. Gold y los límites Silver sí son
+necesarios para cargar el estudio y su mapa.
 
 La carpeta `data/` está excluida de Git. En EC2, adjunta a la instancia un rol
 IAM con permiso `s3:GetObject` sobre los objetos Gold y Silver:
@@ -70,8 +73,10 @@ no como copia mantenida a mano.
 La app usa los mismos cálculos y supuestos de `src/negocio/valor_negocio.py`.
 La interfaz portable2 incluye campos que Gold no tiene. Las coordenadas se
 calculan a partir de los polígonos municipales Silver; el punto representativo
-solo localiza el municipio, no una ubicación de gimnasio. Los datos turísticos,
-secciones censales, auditorías e intervalos de ingresos siguen sin estar
-disponibles. La facturación y viabilidad son escenarios, no ventas observadas
-ni predicciones. Los recuentos de competencia proceden de OpenStreetMap y no
-permiten concluir que un municipio carezca realmente de competidores.
+solo localiza el municipio, no una ubicación de gimnasio. Gold no incluye un
+score de recomendación: la columna se muestra como no disponible, en vez de
+inventar una puntuación. Los datos turísticos, secciones censales, auditorías
+e intervalos de ingresos tampoco están disponibles. La facturación y
+viabilidad son escenarios, no ventas observadas ni predicciones. Los recuentos
+de competencia proceden de OpenStreetMap y no permiten concluir que un
+municipio carezca realmente de competidores.

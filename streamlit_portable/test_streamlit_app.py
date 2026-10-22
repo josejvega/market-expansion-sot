@@ -114,6 +114,28 @@ class Portable2DashboardTests(unittest.TestCase):
 
         self.assertEqual(study["baseline"][0], "04001")
 
+    def test_recommendation_uses_cluster_competition_candidates(self) -> None:
+        municipalities = self.municipalities.assign(
+            cluster=[0, 0, 0, 1, 1, 1],
+        )
+
+        study = build_study(
+            municipalities,
+            has_clusters=True,
+            gold_source="S3 · gold/tabla_oro_municipios_andalucia.parquet",
+        )
+
+        candidates = [
+            row for row in study["municipalities"] if row["candidate"]
+        ]
+        self.assertGreater(len(candidates), 0)
+        self.assertTrue(
+            all("competencia ponderada" in row["reason"] for row in candidates)
+        )
+        self.assertTrue(
+            all(row["score"] is None for row in study["municipalities"])
+        )
+
     def test_renders_portable2_layout_with_live_repository_data(self) -> None:
         study = build_study(
             self.municipalities,
@@ -129,6 +151,9 @@ class Portable2DashboardTests(unittest.TestCase):
         self.assertIn("Simulador de escenarios", html)
         self.assertIn("Secciones censales y areas de influencia", html)
         self.assertIn("marketAnalysis.simulate", html)
+        self.assertRegex(html, r"<style>\s*:root\{--ink:")
+        self.assertIn("--accent:#a100ff", html)
+        self.assertNotIn("\ufeff", html)
         self.assertIn('"lat": 36.05', html)
         self.assertIn('"lon": -1.95', html)
         self.assertNotIn("__DATA__", html)

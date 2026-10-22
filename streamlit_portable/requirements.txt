@@ -5,4 +5,5 @@ pyarrow==21.0.0
 boto3>=1.42,<2
 geopandas==1.0.1
 python-dotenv
+scikit-learn>=1.5,<2
 streamlit>=1.45,<1.46

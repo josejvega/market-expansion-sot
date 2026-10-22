@@ -13,6 +13,7 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
 
 from src.common.storage import get_storage_settings
+from src.modelo.modelo import train_model
 from src.procesado.common.paths import MUNICIPALITY_BOUNDARIES_SILVER_PATH
 
 GOLD_REQUIRED_COLUMNS = {
@@ -263,6 +264,8 @@ def load_municipality_data(
                 clusters_path,
                 dtype={"municipality_code": "string"},
             )
+    if clusters is None:
+        clusters = train_model(gold).clusters
     municipalities, has_clusters = prepare_municipality_data(gold, clusters)
     municipalities = add_municipality_coordinates(municipalities, boundaries)
     return municipalities, has_clusters, source

@@ -46,7 +46,7 @@ def render_study(study: dict) -> str:
         market.add_hline(y=0, line_dash="dot", line_color="#96909c")
     market_html = chart_style(market, 390).to_html(full_html=False, include_plotlyjs="cdn", div_id="market-bubbles",
                                                 config={"displayModeBar": False, "responsive": True})
-    styles = (ROOT / "web" / "streamlit.css").read_text(encoding="utf-8")
+    styles = (ROOT / "web" / "streamlit.css").read_text(encoding="utf-8-sig")
     payload = json.dumps(study, ensure_ascii=True, allow_nan=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
     template = (ROOT / "web" / "streamlit.html").read_text(encoding="utf-8")
     analysis = (ROOT / "web" / "streamlit_analysis.js").read_text(encoding="utf-8")

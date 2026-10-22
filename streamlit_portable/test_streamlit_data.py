@@ -185,6 +185,38 @@ class MunicipalityDataTests(unittest.TestCase):
         self.assertEqual(source, "Local · gold.parquet")
         self.assertIn("lat", result.columns)
 
+    def test_trains_clusters_from_gold_when_no_local_cluster_file_exists(self) -> None:
+        with TemporaryDirectory() as directory:
+            gold_path = Path(directory) / "gold.parquet"
+            boundaries_path = Path(directory) / "boundaries.parquet"
+            gold_data().to_parquet(gold_path, index=False)
+            boundary_data().to_parquet(boundaries_path, index=False)
+            generated_clusters = pd.DataFrame(
+                {
+                    "municipality_code": ["04001", "04002"],
+                    "cluster": [0, 1],
+                }
+            )
+
+            with (
+                patch(
+                    "streamlit_data.get_storage_settings",
+                    return_value=SimpleNamespace(bucket_name=None, region_name=None),
+                ),
+                patch(
+                    "streamlit_data.train_model",
+                    return_value=SimpleNamespace(clusters=generated_clusters),
+                ) as train_model,
+            ):
+                result, has_clusters, _ = load_municipality_data(
+                    gold_path,
+                    boundaries_path=boundaries_path,
+                )
+
+        train_model.assert_called_once()
+        self.assertTrue(has_clusters)
+        self.assertEqual(result["cluster"].tolist(), [0, 1])
+
     def test_prefers_configured_s3_gold(self) -> None:
         gold_parquet = io.BytesIO()
         gold_data().to_parquet(gold_parquet, index=False)
@@ -207,12 +239,24 @@ class MunicipalityDataTests(unittest.TestCase):
                 ),
             ),
             patch("streamlit_data.boto3.client", return_value=s3_client),
+            patch(
+                "streamlit_data.train_model",
+                return_value=SimpleNamespace(
+                    clusters=pd.DataFrame(
+                        {
+                            "municipality_code": ["04001", "04002"],
+                            "cluster": [0, 1],
+                        }
+                    )
+                ),
+            ) as train_model,
         ):
             result, has_clusters, source = load_municipality_data(
                 Path("missing-gold.parquet")
             )
 
-        self.assertFalse(has_clusters)
+        train_model.assert_called_once()
+        self.assertTrue(has_clusters)
         self.assertEqual(result["municipality_code"].tolist(), ["04001", "04002"])
         self.assertEqual(source, "S3 · gold/missing-gold.parquet")
         self.assertEqual(result.loc[0, "lat"], 36.5)

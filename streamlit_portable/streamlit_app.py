@@ -98,6 +98,14 @@ def build_study(
             {"label": f"Gold procesada · {gold_source}", "url": None},
             {
                 "label": (
+                    "Clusters · modelo K-means del repositorio"
+                    if has_clusters
+                    else "Clusters · no disponibles"
+                ),
+                "url": None,
+            },
+            {
+                "label": (
                     "Límites municipales Silver · processed/silver/"
                     "limites_municipales_andalucia.parquet"
                 ),
@@ -110,6 +118,20 @@ def build_study(
     for row in analysis.to_dict(orient="records"):
         identity = str(row["municipality_code"])
         cluster = str(row["cluster"]) if has_clusters else "Sin cluster"
+        is_candidate = bool(row.get("candidate_flag", False))
+        if has_clusters and is_candidate and row.get("viable", False):
+            reason = (
+                "Menos competencia ponderada por población que la media de su "
+                "grupo; supera el umbral de viabilidad."
+            )
+        elif has_clusters and is_candidate:
+            reason = (
+                "Menos competencia ponderada por población que la media de su grupo."
+            )
+        elif has_clusters:
+            reason = "No cumple el criterio de competencia relativa del modelo."
+        else:
+            reason = "Escenario calculado para comparación; no es una recomendación."
         records.append(
             {
                 "id": identity,
@@ -118,12 +140,8 @@ def build_study(
                 "cluster": cluster,
                 "lat": float(row["lat"]),
                 "lon": float(row["lon"]),
-                "candidate": bool(row.get("candidate_flag", False)),
-                "reason": (
-                    "Candidata según la regla del modelo de negocio."
-                    if row.get("candidate_flag", False)
-                    else "Escenario calculado para comparación; no es una recomendación."
-                ),
+                "candidate": is_candidate,
+                "reason": reason,
                 "target_population": int(row["population_18_50"]),
                 "growth_pct": (
                     None
@@ -223,7 +241,7 @@ def render_study(study: dict) -> str:
         config={"displayModeBar": False, "responsive": True},
     )
 
-    styles = (APP_DIR / "web" / "streamlit.css").read_text(encoding="utf-8")
+    styles = (APP_DIR / "web" / "streamlit.css").read_text(encoding="utf-8-sig")
     payload = (
         json.dumps(study, ensure_ascii=True, allow_nan=False)
         .replace("<", "\\u003c")
