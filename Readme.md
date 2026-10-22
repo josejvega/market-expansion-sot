@@ -37,6 +37,10 @@ gym and other-sports-facility counts. It also includes
 is zero. It is saved locally under
 `data/processed/gold/tabla_oro_municipios_andalucia.parquet` and uploaded to
 the S3 `gold/` prefix.
+The quality report has one row per source with Bronze record counts, key-field
+nulls, duplicate records, source-to-Gold crossing counts and treatment notes.
+It is saved locally under `data/processed/quality/tabla_calidad_fuentes.parquet`
+and uploaded to the S3 `processed/quality/` prefix.
 `notebooks/01_ingesta.ipynb` uploads immediately after each raw download when
 `SAVE_S3=true`; `notebooks/02_calidad.ipynb` similarly persists each cleaned
 dataset as it is produced. There are no separate upload cells.
