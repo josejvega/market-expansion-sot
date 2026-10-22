@@ -15,6 +15,7 @@ from src.modelo.modelo import (
     obtener_silhouette_scores,
     seleccionar_municipios_bajo_media_cluster,
 )
+from src.modelo.prepara_variables_modelo import seleccionar_variables_modelo
 
 
 class KMeansModelTests(unittest.TestCase):
@@ -164,6 +165,51 @@ class KMeansModelTests(unittest.TestCase):
             seleccionar_municipios_bajo_media_cluster(municipalities, [0])
         with self.assertRaisesRegex(ValueError, "no pueden contener"):
             seleccionar_municipios_bajo_media_cluster(municipalities, [0, None])
+
+    def test_variable_selection_applies_log1p_to_population(self):
+        municipalities = pd.DataFrame(
+            {
+                "population_18_50": [0, 99, 999],
+                "mean_net_income_per_person": [10000, 20000, 30000],
+                "population_growth_pct": [-1, 0, 1],
+            },
+            index=[3, 7, 9],
+        )
+
+        variables = seleccionar_variables_modelo(municipalities)
+
+        self.assertEqual(
+            variables.columns.tolist(),
+            [
+                "log1p_population_18_50",
+                "mean_net_income_per_person",
+                "population_growth_pct",
+            ],
+        )
+        np.testing.assert_allclose(
+            variables["log1p_population_18_50"],
+            np.log1p(municipalities["population_18_50"]),
+        )
+        pd.testing.assert_series_equal(
+            variables["mean_net_income_per_person"],
+            municipalities["mean_net_income_per_person"],
+        )
+        pd.testing.assert_series_equal(
+            variables["population_growth_pct"],
+            municipalities["population_growth_pct"],
+        )
+
+    def test_variable_selection_rejects_negative_population(self):
+        municipalities = pd.DataFrame(
+            {
+                "population_18_50": [-1],
+                "mean_net_income_per_person": [10000],
+                "population_growth_pct": [0],
+            }
+        )
+
+        with self.assertRaisesRegex(ValueError, "valores negativos"):
+            seleccionar_variables_modelo(municipalities)
 
 
 if __name__ == "__main__":
