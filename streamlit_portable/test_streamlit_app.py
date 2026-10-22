@@ -85,12 +85,34 @@ class Portable2DashboardTests(unittest.TestCase):
 
         self.assertEqual(study["schema_version"], 1)
         self.assertEqual(len(study["baseline"]), 5)
+        expected_baseline = (
+            self.municipalities.sort_values(
+                ["population_18_50", "municipality_code"],
+                ascending=[False, True],
+            )["municipality_code"]
+            .astype(str)
+            .head(5)
+            .tolist()
+        )
+        self.assertEqual(study["baseline"], expected_baseline)
         first = study["municipalities"][0]
         self.assertAlmostEqual(first["lat"], 36.05)
         self.assertAlmostEqual(first["lon"], -1.95)
         self.assertIsNone(first["score"])
         self.assertIsNone(first["tourism_beds"])
         self.assertEqual(validate_study(study), study)
+
+    def test_baseline_recalculates_when_gold_population_changes(self) -> None:
+        municipalities = self.municipalities.copy()
+        municipalities.loc[0, "population_18_50"] = 500000
+
+        study = build_study(
+            municipalities,
+            has_clusters=False,
+            gold_source="S3 · gold/tabla_oro_municipios_andalucia.parquet",
+        )
+
+        self.assertEqual(study["baseline"][0], "04001")
 
     def test_renders_portable2_layout_with_live_repository_data(self) -> None:
         study = build_study(

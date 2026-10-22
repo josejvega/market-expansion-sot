@@ -228,18 +228,24 @@ class MunicipalityDataTests(unittest.TestCase):
         s3_client = unittest.mock.MagicMock()
         s3_client.get_object.side_effect = NoCredentialsError()
 
-        with (
-            patch(
-                "streamlit_data.get_storage_settings",
-                return_value=SimpleNamespace(
-                    bucket_name="test-bucket",
-                    region_name=None,
+        with TemporaryDirectory() as directory:
+            gold_path = Path(directory) / "gold.parquet"
+            boundaries_path = Path(directory) / "boundaries.parquet"
+            gold_data().to_parquet(gold_path, index=False)
+            boundary_data().to_parquet(boundaries_path, index=False)
+
+            with (
+                patch(
+                    "streamlit_data.get_storage_settings",
+                    return_value=SimpleNamespace(
+                        bucket_name="test-bucket",
+                        region_name=None,
+                    ),
                 ),
-            ),
-            patch("streamlit_data.boto3.client", return_value=s3_client),
-            self.assertRaisesRegex(RuntimeError, "credenciales AWS"),
-        ):
-            load_municipality_data(Path("missing-gold.parquet"))
+                patch("streamlit_data.boto3.client", return_value=s3_client),
+                self.assertRaisesRegex(RuntimeError, "No hay credenciales AWS"),
+            ):
+                load_municipality_data(gold_path, boundaries_path=boundaries_path)
 
 
 if __name__ == "__main__":

@@ -6,11 +6,11 @@ JavaScript) y lee la tabla procesada
 `S3_BUCKET` en el `.env` de la raíz del repo. También lee los polígonos
 municipales Silver desde
 `processed/silver/limites_municipales_andalucia.parquet` para calcular un punto
-interior de cada municipio y situarlo en el mapa. Usa el proveedor estándar de
-credenciales de AWS (por ejemplo, un perfil local o un rol de instancia); no
-guardes claves en el código. Si S3 no está disponible, intenta las copias
-locales de Gold y Silver, respectivamente. No hace falta crear ni mantener un
-JSON intermedio.
+interior de cada municipio y situarlo en el mapa. `S3_BUCKET` define el origen
+de los datos; no proporciona credenciales. Si está configurado, Gold y Silver
+se leen de S3 y la app falla con un error claro si no hay acceso, sin usar una
+copia local que pueda estar desactualizada. Si `S3_BUCKET` no está configurado,
+se leen las copias locales. No hace falta crear ni mantener un JSON intermedio.
 
 Si existe `data/resultados/clusters.csv` localmente, incorpora los clusters por
 código municipal. El módulo del modelo actual no los publica a S3. Sin ese
@@ -25,6 +25,18 @@ Desde la raíz del repositorio:
 python -m pip install -r streamlit_portable/requirements.txt
 python -m streamlit run streamlit_portable/streamlit_app.py
 ```
+
+En un equipo local, autentícate con AWS IAM Identity Center antes de arrancar
+la app:
+
+```powershell
+aws sso login --profile <perfil>
+$env:AWS_PROFILE = "<perfil>"
+python -m streamlit run streamlit_portable/streamlit_app.py
+```
+
+En EC2 no guardes claves AWS en `.env`: asocia a la instancia un IAM role
+(instance profile). boto3 obtendrá credenciales temporales de ese rol.
 
 Para incluir selección por clusters, ejecuta antes:
 

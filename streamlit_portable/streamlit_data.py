@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import math
 from io import BytesIO
 from datetime import date
@@ -11,12 +10,10 @@ import boto3
 import geopandas as gpd
 import pandas as pd
 from botocore.config import Config
-from botocore.exceptions import BotoCoreError, ClientError
+from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
 
 from src.common.storage import get_storage_settings
 from src.procesado.common.paths import MUNICIPALITY_BOUNDARIES_SILVER_PATH
-
-LOGGER = logging.getLogger(__name__)
 
 GOLD_REQUIRED_COLUMNS = {
     "municipality_code",
@@ -185,17 +182,12 @@ def load_municipality_data(
     clusters_path: Path | None = None,
     boundaries_path: Path | None = None,
 ) -> tuple[pd.DataFrame, bool, str]:
-    """Read Gold and Silver boundaries from S3, with local file fallbacks."""
+    """Read Gold and Silver from configured S3, or local files when S3 is unset."""
     gold_path = Path(gold_path)
     boundaries_path = Path(
         boundaries_path or MUNICIPALITY_BOUNDARIES_SILVER_PATH
     )
     settings = get_storage_settings()
-    gold = None
-    source = ""
-    s3_error: Exception | None = None
-
-    client = None
     if settings.bucket_name:
         client_options: dict[str, object] = {
             "config": Config(
@@ -208,35 +200,60 @@ def load_municipality_data(
             client_options["region_name"] = settings.region_name
         try:
             client = boto3.client("s3", **client_options)
-            response = client.get_object(
-                Bucket=settings.bucket_name,
-                Key=f"gold/{gold_path.name}",
-            )
-            with response["Body"] as body:
-                gold = pd.read_parquet(BytesIO(body.read()))
-            source = f"S3 · gold/{gold_path.name}"
-        except (BotoCoreError, ClientError) as error:
-            s3_error = error
-
-    if gold is None:
-        if gold_path.is_file():
-            if s3_error is not None:
-                LOGGER.warning(
-                    "Could not read Gold from S3; using local copy %s: %s",
-                    gold_path,
-                    s3_error,
-                )
-            gold = pd.read_parquet(gold_path)
-            source = f"Local · {gold_path.name}"
-        elif s3_error is not None:
+        except BotoCoreError as error:
             raise RuntimeError(
-                "No se pudo leer Gold desde S3 y no existe copia local. "
-                "Comprueba las credenciales AWS y los permisos s3:GetObject."
-            ) from s3_error
-        else:
-            raise FileNotFoundError(
-                f"No se encuentra la tabla Gold en S3 ni localmente: {gold_path}"
+                "No se pudo crear el cliente S3. Comprueba la región y que haya "
+                "credenciales AWS disponibles mediante un perfil local o un rol IAM."
+            ) from error
+
+        gold_key = f"gold/{gold_path.name}"
+        silver_key = f"processed/silver/{boundaries_path.name}"
+        try:
+            gold_response = client.get_object(
+                Bucket=settings.bucket_name,
+                Key=gold_key,
             )
+            with gold_response["Body"] as body:
+                gold = pd.read_parquet(BytesIO(body.read()))
+        except (BotoCoreError, ClientError) as error:
+            raise RuntimeError(
+                _s3_read_error_message(
+                    settings.bucket_name,
+                    gold_key,
+                    error,
+                )
+            ) from error
+
+        try:
+            silver_response = client.get_object(
+                Bucket=settings.bucket_name,
+                Key=silver_key,
+            )
+            with silver_response["Body"] as body:
+                boundaries = gpd.read_parquet(BytesIO(body.read()))
+        except (BotoCoreError, ClientError) as error:
+            raise RuntimeError(
+                _s3_read_error_message(
+                    settings.bucket_name,
+                    silver_key,
+                    error,
+                )
+            ) from error
+
+        source = f"S3 · {gold_key}"
+    else:
+        if not gold_path.is_file():
+            raise FileNotFoundError(
+                f"No está configurado S3_BUCKET y no se encuentra Gold local: {gold_path}"
+            )
+        if not boundaries_path.is_file():
+            raise FileNotFoundError(
+                "No está configurado S3_BUCKET y no se encuentran los límites "
+                f"Silver locales: {boundaries_path}"
+            )
+        gold = pd.read_parquet(gold_path)
+        boundaries = gpd.read_parquet(boundaries_path)
+        source = f"Local · {gold_path.name}"
 
     clusters = None
     if clusters_path is not None:
@@ -247,39 +264,32 @@ def load_municipality_data(
                 dtype={"municipality_code": "string"},
             )
     municipalities, has_clusters = prepare_municipality_data(gold, clusters)
-    boundaries = None
-    boundaries_s3_error: Exception | None = None
-    if settings.bucket_name and client is not None:
-        try:
-            response = client.get_object(
-                Bucket=settings.bucket_name,
-                Key=f"processed/silver/{boundaries_path.name}",
-            )
-            with response["Body"] as body:
-                boundaries = gpd.read_parquet(BytesIO(body.read()))
-        except (BotoCoreError, ClientError) as error:
-            boundaries_s3_error = error
-    if boundaries is None and boundaries_path.is_file():
-        if boundaries_s3_error is not None:
-            LOGGER.warning(
-                "Could not read Silver boundaries from S3; using local copy %s: %s",
-                boundaries_path,
-                boundaries_s3_error,
-            )
-        boundaries = gpd.read_parquet(boundaries_path)
-    if boundaries is None and boundaries_s3_error is not None:
-        raise RuntimeError(
-            "No se pudieron leer los límites municipales Silver de S3. "
-            "Comprueba que exista processed/silver/"
-            f"{boundaries_path.name} y que el rol tenga permiso s3:GetObject."
-        ) from boundaries_s3_error
-    if boundaries is None:
-        raise FileNotFoundError(
-            "No se encuentran los límites municipales Silver en S3 ni localmente: "
-            f"{boundaries_path}"
-        )
     municipalities = add_municipality_coordinates(municipalities, boundaries)
     return municipalities, has_clusters, source
+
+
+def _s3_read_error_message(
+    bucket: str,
+    key: str,
+    error: BotoCoreError | ClientError,
+) -> str:
+    response = getattr(error, "response", {})
+    code = response.get("Error", {}).get("Code", type(error).__name__)
+    location = f"s3://{bucket}/{key}"
+    if isinstance(error, NoCredentialsError):
+        return (
+            f"No hay credenciales AWS disponibles para leer {location}. "
+            "En EC2, asocia un rol IAM a la instancia; en local, inicia sesión "
+            "con AWS IAM Identity Center y configura AWS_PROFILE."
+        )
+    if code in {"AccessDenied", "403"}:
+        return (
+            f"AWS denegó la lectura de {location} (AccessDenied). Comprueba que "
+            "el rol/perfil tenga s3:GetObject y que la política del bucket lo permita."
+        )
+    if code in {"NoSuchKey", "404"}:
+        return f"No existe el objeto {location} (NoSuchKey). Comprueba su nombre en S3."
+    return f"No se pudo leer {location} desde S3 ({code})."
 
 
 def validate_study(study: dict) -> dict:
