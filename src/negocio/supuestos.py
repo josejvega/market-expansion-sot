@@ -78,6 +78,23 @@ SUPUESTOS = {
 
 
 PESOS_CENTRAL = "central"
+ESCENARIOS_PESOS = {
+    "solo_gimnasios": {
+        "fitness_centre": 1.0,
+        "sports_centre": 0.0,
+        "fitness_station": 0.0,
+    },
+    "central": {
+        "fitness_centre": 1.0,
+        "sports_centre": 0.1,
+        "fitness_station": 0.1,
+    },
+    "todo_igual": {
+        "fitness_centre": 1.0,
+        "sports_centre": 1.0,
+        "fitness_station": 1.0,
+    },
+}
 
 
 def parametros(escenario="central", **cambios):
