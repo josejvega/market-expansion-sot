@@ -13,7 +13,7 @@ from src.common.upload_to_s3 import upload_files_to_s3
 from src.procesado.common.paths import DOUBTFUL_GYMS_TABLE_PATH
 
 QUALITY_PREFIX = "processed/quality"
-REFERENCE_MIN_POPULATION_18_50 = 5_000
+REFERENCE_GYMS_PER_10K_18_50 = 1.0
 MIN_EXPECTED_GYMS = 1.0
 LOW_COVERAGE_THRESHOLD = 0.5
 REVIEW_COLUMNS = [
@@ -28,8 +28,9 @@ REVIEW_COLUMNS = [
     "review_reason",
 ]
 REVIEW_REASON = (
-    "Posible infradetección en OSM: el recuento observado es inferior al "
-    "50 % de la referencia estimada; revisar antes de tratarlo como dato confirmado."
+    "Posible infradetección en OSM: el recuento observado equivale a menos de "
+    "0,5 gimnasios por cada 10.000 habitantes de 18–50 años; revisar antes de "
+    "tratarlo como dato confirmado."
 )
 
 
@@ -40,11 +41,7 @@ def _require_columns(table: pd.DataFrame, required_columns: set[str]) -> None:
 
 
 def create_doubtful_municipalities_table(gold: pd.DataFrame) -> pd.DataFrame:
-    """Return municipalities with fewer than half the expected OSM gym count.
-
-    The reference rate is the median observed gym density among municipalities
-    with at least 5,000 residents aged 18–50 and at least one OSM gym.
-    """
+    """Return municipalities below a fixed OSM gym-density review threshold."""
     required_columns = {
         "municipality_code",
         "municipality_name",
@@ -78,23 +75,7 @@ def create_doubtful_municipalities_table(gold: pd.DataFrame) -> pd.DataFrame:
     if municipalities["population_18_50"].eq(0).any():
         raise ValueError("Gold population_18_50 must be positive.")
 
-    reference_municipalities = municipalities.loc[
-        municipalities["population_18_50"].ge(REFERENCE_MIN_POPULATION_18_50)
-        & municipalities["gyms_count"].gt(0)
-    ]
-    if reference_municipalities.empty:
-        raise ValueError(
-            "Cannot calculate the gym-density reference: no municipality has "
-            f"at least {REFERENCE_MIN_POPULATION_18_50} residents aged 18–50 "
-            "and at least one gym."
-        )
-
-    reference_rate = (
-        reference_municipalities["gyms_count"]
-        .div(reference_municipalities["population_18_50"])
-        .mul(10_000)
-        .median()
-    )
+    reference_rate = REFERENCE_GYMS_PER_10K_18_50
     municipalities["expected_gyms"] = (
         reference_rate * municipalities["population_18_50"] / 10_000
     )

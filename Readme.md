@@ -43,12 +43,12 @@ It is saved locally under `data/processed/quality/tabla_calidad_fuentes.parquet`
 and uploaded to the S3 `processed/quality/` prefix.
 The OSM gym coverage review is saved as
 `data/processed/quality/municipios_dudosos_gimnasios.parquet` and uploaded to
-the same S3 prefix. It uses the median observed gym density among municipalities
-with at least 5,000 residents aged 18–50 and at least one OSM gym as an internal
-reference. A municipality is flagged for manual review when its expected count
-is at least one and its OSM count is below 50% of that expectation. This is a
-heuristic, not an official coverage standard, and it does not remove any
-municipality from Gold.
+the same S3 prefix. It uses a fixed internal reference of one gym per 10,000
+residents aged 18–50; this rate is a project assumption, not a statistic derived
+from OSM or an official coverage standard. A municipality is flagged for
+manual review when at least one gym is expected and its observed rate is below
+0.5 gyms per 10,000 residents aged 18–50. This is a review heuristic and does
+not remove any municipality from Gold.
 `notebooks/01_ingesta.ipynb` uploads immediately after each raw download when
 `SAVE_S3=true`; `notebooks/02_calidad.ipynb` similarly persists each cleaned
 dataset as it is produced. There are no separate upload cells.

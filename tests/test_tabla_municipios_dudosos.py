@@ -43,30 +43,62 @@ def gold_table() -> pd.DataFrame:
 
 
 class DoubtfulMunicipalityTests(unittest.TestCase):
-    def test_flags_low_counts_using_population_scaled_median_reference(self) -> None:
+    def test_flags_counts_below_fixed_rate_threshold(self) -> None:
         review = create_doubtful_municipalities_table(gold_table())
 
-        self.assertEqual(review["municipality_code"].tolist(), ["04003", "04004"])
-        self.assertEqual(review["reference_gyms_per_10k_18_50"].tolist(), [1.5, 1.5])
-        self.assertEqual(review["expected_gyms"].tolist(), [1.5, 4.5])
-        self.assertAlmostEqual(
-            review["observed_vs_expected_pct"].tolist()[1],
-            200 / 4.5,
-        )
+        self.assertEqual(review["municipality_code"].tolist(), ["04003"])
+        self.assertEqual(review["reference_gyms_per_10k_18_50"].tolist(), [1.0])
+        self.assertEqual(review["expected_gyms"].tolist(), [1.0])
+        self.assertEqual(review["observed_vs_expected_pct"].tolist(), [0.0])
         self.assertTrue(
             review["review_reason"]
             .str.contains("Posible infradetección")
             .all()
         )
 
+    def test_flags_one_gym_for_30_000_residents_aged_18_50(self) -> None:
+        gold = pd.DataFrame(
+            {
+                "municipality_code": ["04001"],
+                "municipality_name": ["Town"],
+                "province": ["Almería"],
+                "population_18_50": [30_000],
+                "gyms_count": [1],
+            }
+        )
+
+        review = create_doubtful_municipalities_table(gold)
+
+        self.assertEqual(review["municipality_code"].tolist(), ["04001"])
+        self.assertEqual(review["expected_gyms"].tolist(), [3.0])
+        self.assertAlmostEqual(
+            review["observed_vs_expected_pct"].tolist()[0],
+            100 / 3,
+        )
+
     def test_does_not_flag_exactly_half_of_expected_count(self) -> None:
         gold = pd.DataFrame(
             {
-                "municipality_code": ["04001", "04002", "04003"],
-                "municipality_name": ["Town"] * 3,
-                "province": ["Almería"] * 3,
-                "population_18_50": [10_000, 20_000, 10_000],
-                "gyms_count": [2, 4, 1],
+                "municipality_code": ["04001"],
+                "municipality_name": ["Town"],
+                "province": ["Almería"],
+                "population_18_50": [20_000],
+                "gyms_count": [1],
+            }
+        )
+
+        review = create_doubtful_municipalities_table(gold)
+
+        self.assertTrue(review.empty)
+
+    def test_does_not_flag_when_fewer_than_one_gym_is_expected(self) -> None:
+        gold = pd.DataFrame(
+            {
+                "municipality_code": ["04001"],
+                "municipality_name": ["Town"],
+                "province": ["Almería"],
+                "population_18_50": [9_999],
+                "gyms_count": [0],
             }
         )
 
@@ -93,7 +125,7 @@ class DoubtfulMunicipalityTests(unittest.TestCase):
             ):
                 report = create_and_upload_doubtful_municipalities_table(gold_table())
 
-            self.assertEqual(len(report), 2)
+            self.assertEqual(len(report), 1)
             self.assertTrue(output_path.is_file())
             upload.assert_called_once_with(
                 [output_path],
