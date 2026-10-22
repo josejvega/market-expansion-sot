@@ -167,7 +167,7 @@ def load_municipality_data(
                     s3_error,
                 )
             gold = pd.read_parquet(gold_path)
-            source = str(gold_path)
+            source = f"Local · {gold_path.name}"
         elif s3_error is not None:
             raise RuntimeError(
                 "No se pudo leer Gold desde S3 y no existe copia local. "

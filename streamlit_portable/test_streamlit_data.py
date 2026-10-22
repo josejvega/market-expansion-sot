@@ -108,7 +108,7 @@ class MunicipalityDataTests(unittest.TestCase):
 
         self.assertTrue(has_clusters)
         self.assertEqual(result["cluster"].tolist(), [0, 1])
-        self.assertEqual(source, str(gold_path))
+        self.assertEqual(source, "Local · gold.parquet")
 
     def test_prefers_configured_s3_gold(self) -> None:
         parquet = io.BytesIO()

@@ -79,9 +79,13 @@
   <footer><div id="sources" class="source-links"></div><span>Grupo 5 · Market Expansion</span></footer>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script>__GOLD_RENDERER__</script>
   <script type="application/json" id="study-data">__DATA__</script>
   <script>
     const DATA=JSON.parse(document.getElementById('study-data').textContent);
+    if(DATA.source_type==='gold'){
+      window.renderGoldDashboard(DATA);
+    }else{
     const el=id=>document.getElementById(id);
     const fmt=(value,digits=0)=>typeof value!=='number'||!Number.isFinite(value)?'n/d':new Intl.NumberFormat('es-ES',{maximumFractionDigits:digits}).format(value);
     const money=value=>value==null?'n/d':fmt(value)+' EUR';
@@ -147,6 +151,7 @@
       window.scopeStudy={rows,selected,baseline,map,markers,baselineMarkers,candidateLayer,competitionLayer};
     }else el('map').textContent='Mapa no disponible. Consulta los resultados en las tablas.';
     if(window.lucide)lucide.createIcons();
+    }
   </script>
   <script>__ANALYSIS__</script>
 </body>

@@ -1,6 +1,7 @@
-# Streamlit · datos del repositorio
+# Streamlit · export original con datos del repositorio
 
-El dashboard lee primero la tabla procesada
+La app conserva la interfaz original del export (`web/streamlit.html` y sus
+estilos) y lee primero la tabla procesada
 `gold/tabla_oro_municipios_andalucia.parquet` del bucket configurado con
 `S3_BUCKET` en el `.env` de la raíz del repo. Usa el proveedor estándar de
 credenciales de AWS (por ejemplo, un perfil local o un rol de instancia); no
@@ -10,15 +11,14 @@ dónde se cargó Gold. No hace falta crear ni mantener un JSON intermedio.
 
 Si existe `data/resultados/clusters.csv` localmente, incorpora los clusters por
 código municipal. El módulo del modelo actual no los publica a S3. Sin ese
-archivo, muestra el análisis Gold y omite la selección del modelo.
+archivo, la interfaz conserva su diseño y muestra el ranking viable de negocio
+y el baseline, sin fingir una selección de clusters.
 
 ## Preparar los datos y ejecutar
 
 Desde la raíz del repositorio:
 
 ```powershell
-python -m pip install -r requirements.txt
-python run.py --local-only
 python -m pip install -r streamlit_portable/requirements.txt
 python -m streamlit run streamlit_portable/streamlit_app.py
 ```
@@ -51,6 +51,9 @@ entre sistemas; en ese caso conviene generarlo como artefacto a partir de Gold,
 no como copia mantenida a mano.
 
 La app usa los mismos cálculos y supuestos de `src/negocio/valor_negocio.py`.
-La facturación y viabilidad son escenarios, no ventas observadas ni
-predicciones. Los recuentos de competencia proceden de OpenStreetMap y no
-permiten concluir que un municipio carezca realmente de competidores.
+La interfaz original incluía campos que Gold no tiene. Estos quedan marcados
+como no disponibles: no se inventan coordenadas para el mapa, datos turísticos,
+secciones censales, auditorías ni intervalos de ingresos. La facturación y
+viabilidad son escenarios, no ventas observadas ni predicciones. Los recuentos
+de competencia proceden de OpenStreetMap y no permiten concluir que un
+municipio carezca realmente de competidores.
