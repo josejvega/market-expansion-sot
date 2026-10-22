@@ -89,7 +89,7 @@ def build_study(
             "El recuento OSM de instalaciones no es una auditoría de competidores.",
         ],
         "limitations": [
-            "Gold no contiene coordenadas municipales; esta vista no dibuja ubicaciones en un mapa.",
+            "Las coordenadas del mapa representan un punto interior de cada polígono municipal Silver; no son una ubicación de gimnasio.",
             "Gold agrupa gimnasios y otras instalaciones deportivas, sin distinguir todos sus tipos.",
             "Los datos de Gold no incluyen auditorías de mercado, turismo ni secciones censales.",
             "La facturación y la viabilidad son escenarios basados en supuestos, no predicciones.",
@@ -107,8 +107,8 @@ def build_study(
                 "name": row["municipality_name"],
                 "province": row["province"],
                 "cluster": cluster,
-                "lat": None,
-                "lon": None,
+                "lat": float(row["lat"]),
+                "lon": float(row["lon"]),
                 "candidate": bool(row.get("candidate_flag", False)),
                 "reason": (
                     "Candidata según la regla del modelo de negocio."

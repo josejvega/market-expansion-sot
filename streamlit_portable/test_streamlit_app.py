@@ -3,10 +3,12 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+import geopandas as gpd
 import pandas as pd
+from shapely.geometry import Polygon
 
 from streamlit_app import build_study, render_study
-from streamlit_data import prepare_municipality_data
+from streamlit_data import add_municipality_coordinates, prepare_municipality_data
 
 
 class OriginalExportDashboardTests(unittest.TestCase):
@@ -40,6 +42,27 @@ class OriginalExportDashboardTests(unittest.TestCase):
             }
         )
         self.municipalities, _ = prepare_municipality_data(gold)
+        boundaries = gpd.GeoDataFrame(
+            {
+                "municipality_code": gold["municipality_code"],
+                "geometry": [
+                    Polygon(
+                        [
+                            (-2.0 + index * 0.1, 36.0),
+                            (-1.9 + index * 0.1, 36.0),
+                            (-1.9 + index * 0.1, 36.1),
+                            (-2.0 + index * 0.1, 36.1),
+                        ]
+                    )
+                    for index in range(len(gold))
+                ],
+            },
+            crs="EPSG:4326",
+        )
+        self.municipalities = add_municipality_coordinates(
+            self.municipalities,
+            boundaries,
+        )
 
     def test_builds_export_schema_from_gold_without_fabricated_coordinates(self) -> None:
         study = build_study(
@@ -50,8 +73,8 @@ class OriginalExportDashboardTests(unittest.TestCase):
 
         self.assertEqual(study["source_type"], "gold")
         self.assertEqual(len(study["baseline"]), 5)
-        self.assertIsNone(study["municipalities"][0]["lat"])
-        self.assertIsNone(study["municipalities"][0]["lon"])
+        self.assertAlmostEqual(study["municipalities"][0]["lat"], 36.05)
+        self.assertAlmostEqual(study["municipalities"][0]["lon"], -1.95)
         self.assertIsNone(study["municipalities"][0]["score"])
         self.assertFalse(study["clusters_available"])
         self.assertEqual(study["municipalities"][0]["tourism_beds"], None)
@@ -69,6 +92,9 @@ class OriginalExportDashboardTests(unittest.TestCase):
         self.assertIn("tab-intelligence", html)
         self.assertIn("tab-decision", html)
         self.assertIn("renderGoldDashboard", html)
+        self.assertIn("L.latLngBounds", html)
+        self.assertIn('"lat": 36.05', html)
+        self.assertIn('"lon": -1.95', html)
         self.assertIn("background:#faf9fc!important", html)
         self.assertIn("color:#17151b!important", html)
         self.assertIn("source_type", html)

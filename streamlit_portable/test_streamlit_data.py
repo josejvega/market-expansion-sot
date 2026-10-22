@@ -8,9 +8,12 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point, Polygon
 
 from botocore.exceptions import NoCredentialsError
 from streamlit_data import (
+    add_municipality_coordinates,
     load_municipality_data,
     prepare_municipality_data,
 )
@@ -29,6 +32,19 @@ def gold_data() -> pd.DataFrame:
             "other_sports_facilities_count": [1, 1],
             "gyms_per_10k_18_50": [571.43, 0.0],
         }
+    )
+
+
+def boundary_data() -> gpd.GeoDataFrame:
+    return gpd.GeoDataFrame(
+        {
+            "municipality_code": ["04001", "04002"],
+            "geometry": [
+                Polygon([(-2.0, 36.0), (-1.0, 36.0), (-1.0, 37.0), (-2.0, 37.0)]),
+                Polygon([(-3.0, 37.0), (-2.0, 37.0), (-2.0, 38.0), (-3.0, 38.0)]),
+            ],
+        },
+        crs="EPSG:4326",
     )
 
 
@@ -85,11 +101,34 @@ class MunicipalityDataTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "debe ser positiva"):
             prepare_municipality_data(gold)
 
+    def test_adds_interior_coordinates_from_silver_polygons(self) -> None:
+        gold, _ = prepare_municipality_data(gold_data())
+
+        result = add_municipality_coordinates(gold, boundary_data())
+
+        self.assertIn("lat", result.columns)
+        self.assertIn("lon", result.columns)
+        self.assertEqual(result.loc[0, "lon"], -1.5)
+        self.assertEqual(result.loc[0, "lat"], 36.5)
+        self.assertTrue(
+            boundary_data().geometry.iloc[0].contains(
+                Point(result.loc[0, "lon"], result.loc[0, "lat"])
+            )
+        )
+
+    def test_rejects_silver_boundary_code_coverage_mismatch(self) -> None:
+        gold, _ = prepare_municipality_data(gold_data())
+
+        with self.assertRaisesRegex(ValueError, "exactamente los mismos municipios"):
+            add_municipality_coordinates(gold, boundary_data().iloc[:1])
+
     def test_loads_gold_parquet_and_optional_cluster_csv(self) -> None:
         with TemporaryDirectory() as directory:
             gold_path = Path(directory) / "gold.parquet"
             clusters_path = Path(directory) / "clusters.csv"
+            boundaries_path = Path(directory) / "boundaries.parquet"
             gold_data().to_parquet(gold_path, index=False)
+            boundary_data().to_parquet(boundaries_path, index=False)
             pd.DataFrame(
                 {
                     "municipality_code": ["04001", "04002"],
@@ -104,18 +143,26 @@ class MunicipalityDataTests(unittest.TestCase):
                 result, has_clusters, source = load_municipality_data(
                     gold_path,
                     clusters_path,
+                    boundaries_path,
                 )
 
         self.assertTrue(has_clusters)
         self.assertEqual(result["cluster"].tolist(), [0, 1])
         self.assertEqual(source, "Local · gold.parquet")
+        self.assertIn("lat", result.columns)
 
     def test_prefers_configured_s3_gold(self) -> None:
-        parquet = io.BytesIO()
-        gold_data().to_parquet(parquet, index=False)
-        parquet.seek(0)
+        gold_parquet = io.BytesIO()
+        gold_data().to_parquet(gold_parquet, index=False)
+        boundaries_parquet = io.BytesIO()
+        boundary_data().to_parquet(boundaries_parquet, index=False)
+        gold_parquet.seek(0)
+        boundaries_parquet.seek(0)
         s3_client = unittest.mock.MagicMock()
-        s3_client.get_object.return_value = {"Body": parquet}
+        s3_client.get_object.side_effect = [
+            {"Body": gold_parquet},
+            {"Body": boundaries_parquet},
+        ]
 
         with (
             patch(
@@ -134,9 +181,13 @@ class MunicipalityDataTests(unittest.TestCase):
         self.assertFalse(has_clusters)
         self.assertEqual(result["municipality_code"].tolist(), ["04001", "04002"])
         self.assertEqual(source, "S3 · gold/missing-gold.parquet")
-        s3_client.get_object.assert_called_once_with(
-            Bucket="test-bucket",
-            Key="gold/missing-gold.parquet",
+        self.assertEqual(result.loc[0, "lat"], 36.5)
+        self.assertEqual(
+            [call.kwargs["Key"] for call in s3_client.get_object.call_args_list],
+            [
+                "gold/missing-gold.parquet",
+                "processed/silver/limites_municipales_andalucia.parquet",
+            ],
         )
 
     def test_reports_missing_s3_credentials_without_local_fallback(self) -> None:

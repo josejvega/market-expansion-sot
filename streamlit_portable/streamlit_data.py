@@ -8,11 +8,13 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import boto3
+import geopandas as gpd
 import pandas as pd
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.common.storage import get_storage_settings
+from src.procesado.common.paths import MUNICIPALITY_BOUNDARIES_SILVER_PATH
 
 LOGGER = logging.getLogger(__name__)
 
@@ -126,17 +128,70 @@ def prepare_municipality_data(
     return joined, True
 
 
+def add_municipality_coordinates(
+    municipalities: pd.DataFrame,
+    boundaries: gpd.GeoDataFrame,
+) -> pd.DataFrame:
+    """Join municipality representative points from Silver boundary polygons."""
+    required = {"municipality_code", "geometry"}
+    missing = sorted(required.difference(boundaries.columns))
+    if missing:
+        raise ValueError(f"Silver de límites: faltan columnas requeridas: {missing}")
+    if boundaries.crs is None:
+        raise ValueError("Silver de límites: el GeoParquet no declara su CRS.")
+
+    boundary_data = boundaries.loc[:, ["municipality_code", "geometry"]].copy()
+    boundary_data["municipality_code"] = (
+        boundary_data["municipality_code"].astype("string").str.strip()
+    )
+    codes = boundary_data["municipality_code"]
+    if codes.isna().any() or codes.duplicated().any():
+        raise ValueError("Silver de límites: municipality_code debe ser único y no nulo.")
+    if not codes.str.fullmatch(r"\d{5}").fillna(False).all():
+        raise ValueError("Silver de límites: municipality_code debe tener cinco dígitos.")
+    if boundary_data.geometry.isna().any() or boundary_data.geometry.is_empty.any():
+        raise ValueError("Silver de límites: hay geometrías vacías o nulas.")
+
+    if boundaries.crs.to_epsg() != 4326:
+        boundary_data = gpd.GeoDataFrame(
+            boundary_data,
+            geometry="geometry",
+            crs=boundaries.crs,
+        ).to_crs("EPSG:4326")
+    representative_points = boundary_data.geometry.representative_point()
+    boundary_data["lat"] = representative_points.y
+    boundary_data["lon"] = representative_points.x
+    coordinates = boundary_data.loc[:, ["municipality_code", "lat", "lon"]]
+
+    municipality_codes = municipalities["municipality_code"].astype("string")
+    if set(municipality_codes) != set(coordinates["municipality_code"]):
+        raise ValueError(
+            "Silver de límites y Gold no contienen exactamente los mismos municipios."
+        )
+    return municipalities.merge(
+        coordinates,
+        on="municipality_code",
+        how="left",
+        validate="one_to_one",
+    )
+
+
 def load_municipality_data(
     gold_path: Path,
     clusters_path: Path | None = None,
+    boundaries_path: Path | None = None,
 ) -> tuple[pd.DataFrame, bool, str]:
-    """Read Gold from configured S3, falling back to the local copy if available."""
+    """Read Gold and Silver boundaries from S3, with local file fallbacks."""
     gold_path = Path(gold_path)
+    boundaries_path = Path(
+        boundaries_path or MUNICIPALITY_BOUNDARIES_SILVER_PATH
+    )
     settings = get_storage_settings()
     gold = None
     source = ""
     s3_error: Exception | None = None
 
+    client = None
     if settings.bucket_name:
         client_options: dict[str, object] = {
             "config": Config(
@@ -148,7 +203,8 @@ def load_municipality_data(
         if settings.region_name:
             client_options["region_name"] = settings.region_name
         try:
-            response = boto3.client("s3", **client_options).get_object(
+            client = boto3.client("s3", **client_options)
+            response = client.get_object(
                 Bucket=settings.bucket_name,
                 Key=f"gold/{gold_path.name}",
             )
@@ -187,6 +243,38 @@ def load_municipality_data(
                 dtype={"municipality_code": "string"},
             )
     municipalities, has_clusters = prepare_municipality_data(gold, clusters)
+    boundaries = None
+    boundaries_s3_error: Exception | None = None
+    if settings.bucket_name and client is not None:
+        try:
+            response = client.get_object(
+                Bucket=settings.bucket_name,
+                Key=f"processed/silver/{boundaries_path.name}",
+            )
+            with response["Body"] as body:
+                boundaries = gpd.read_parquet(BytesIO(body.read()))
+        except (BotoCoreError, ClientError) as error:
+            boundaries_s3_error = error
+    if boundaries is None and boundaries_path.is_file():
+        if boundaries_s3_error is not None:
+            LOGGER.warning(
+                "Could not read Silver boundaries from S3; using local copy %s: %s",
+                boundaries_path,
+                boundaries_s3_error,
+            )
+        boundaries = gpd.read_parquet(boundaries_path)
+    if boundaries is None and boundaries_s3_error is not None:
+        raise RuntimeError(
+            "No se pudieron leer los límites municipales Silver de S3. "
+            "Comprueba que exista processed/silver/"
+            f"{boundaries_path.name} y que el rol tenga permiso s3:GetObject."
+        ) from boundaries_s3_error
+    if boundaries is None:
+        raise FileNotFoundError(
+            "No se encuentran los límites municipales Silver en S3 ni localmente: "
+            f"{boundaries_path}"
+        )
+    municipalities = add_municipality_coordinates(municipalities, boundaries)
     return municipalities, has_clusters, source
 
 

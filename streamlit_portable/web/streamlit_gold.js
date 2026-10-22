@@ -52,23 +52,82 @@ window.renderGoldDashboard = function (data) {
     const mapTitle = document.querySelector('#decision .map-shell h2');
     mapTitle.textContent = 'Cobertura geográfica';
     const map = el('map');
-    map.setAttribute('aria-label', 'Coordenadas no incluidas en Gold');
-    map.textContent = 'Gold no contiene coordenadas municipales; no se representa un mapa.';
-    map.style.display = 'grid';
-    map.style.placeItems = 'center';
-    map.style.padding = '24px';
-    map.style.color = 'var(--muted)';
+    const locatedRows = rows.filter(row =>
+        Number.isFinite(row.lat) && Number.isFinite(row.lon)
+        && Math.abs(row.lat) <= 90 && Math.abs(row.lon) <= 180
+    );
+    if (window.L && locatedRows.length) {
+        map.replaceChildren();
+        const municipalMap = L.map(map, {
+            preferCanvas: true,
+            fadeAnimation: false,
+            zoomAnimation: false,
+            scrollWheelZoom: false
+        });
+        L.tileLayer(
+            'https://www.ign.es/wmts/ign-base?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=IGNBase-gris&STYLE=default&FORMAT=image/jpeg&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+            {attribution: '© IGN', maxZoom: 18}
+        ).addTo(municipalMap);
+        const selectedIds = new Set(data.selection);
+        const baselineIds = new Set(data.baseline);
+        const markerById = new Map();
+        const markers = locatedRows.map(row => {
+            const isSelected = selectedIds.has(row.id);
+            const isBaseline = baselineIds.has(row.id);
+            const color = isSelected ? '#a100ff' : isBaseline ? '#005446' : '#2976ad';
+            const marker = L.circleMarker([row.lat, row.lon], {
+                radius: isSelected || isBaseline ? 7 : 4,
+                color,
+                weight: 1.5,
+                fillColor: color,
+                fillOpacity: isSelected || isBaseline ? 0.9 : 0.48
+            }).bindPopup(
+                `<strong>${escape(row.name)}</strong><br>${escape(row.province)}`
+                + `<br>Población 18–50: ${fmt(row.target_population)}`
+                + `<br>Gimnasios: ${fmt(row.gyms_count)}`
+            );
+            markerById.set(row.id, marker);
+            return marker;
+        });
+        L.layerGroup(markers).addTo(municipalMap);
+        municipalMap.fitBounds(
+            L.latLngBounds(locatedRows.map(row => [row.lat, row.lon])),
+            {padding: [20, 20], maxZoom: 9, animate: false}
+        );
+        window.goldMunicipalMap = municipalMap;
+        window.goldMunicipalMarkers = markerById;
+        window.addEventListener('resize', () => municipalMap.invalidateSize());
+        document.querySelector('#decision .map-key').innerHTML =
+            '<span><i class="dot"></i>Selección</span>'
+            + '<span><i class="dot baseline"></i>Baseline</span>'
+            + '<span><i class="dot peer"></i>Otros municipios</span>';
+        document.addEventListener('click', event => {
+            const button = event.target.closest('#selected-rows .place, #baseline-rows .place');
+            if (!button) return;
+            const row = rows.find(item => item.id === button.dataset.id);
+            if (!row || !markerById.has(row.id)) return;
+            municipalMap.setView([row.lat, row.lon], 10, {animate: false});
+            markerById.get(row.id).openPopup();
+        });
+    } else {
+        map.setAttribute('aria-label', 'Coordenadas municipales no disponibles');
+        map.textContent = 'No hay coordenadas municipales válidas en Silver.';
+        map.style.display = 'grid';
+        map.style.placeItems = 'center';
+        map.style.padding = '24px';
+        map.style.color = 'var(--muted)';
+    }
     el('selected-rows').closest('section').querySelector('h2').textContent =
         data.clusters_available ? 'Selección del modelo de negocio' : 'Municipios viables destacados';
     document.querySelector('#selected-rows').closest('table').querySelector('thead').innerHTML =
         '<tr><th>#</th><th class="name">Municipio</th><th>Score</th><th>Demanda /<br>competidor</th><th>Facturación<br>anual estimada</th><th class="name">Lectura</th></tr>';
     el('selected-rows').innerHTML = selected.map((row, index) =>
-        `<tr><td>${index + 1}</td><td class="name">${escape(row.name)}<small>${escape(row.province)}</small></td><td>${fmt(row.score, 1)}</td><td>${fmt(row.demand_per_competitor)}</td><td class="money">${money(row.annual_revenue_eur)}</td><td class="reason">${escape(row.reason)}</td></tr>`
+        `<tr><td>${index + 1}</td><td class="name"><button class="place" data-id="${escape(row.id)}">${escape(row.name)}</button><small>${escape(row.province)}</small></td><td>${fmt(row.score, 1)}</td><td>${fmt(row.demand_per_competitor)}</td><td class="money">${money(row.annual_revenue_eur)}</td><td class="reason">${escape(row.reason)}</td></tr>`
     ).join('') || '<tr><td colspan="6" class="empty">No hay municipios viables en este escenario.</td></tr>';
     el('selection-note').textContent = `${scenarioLabel}. Las estimaciones son escenarios, no predicciones ni recomendaciones de inversión.`;
 
     el('baseline-rows').innerHTML = baseline.map((row, index) =>
-        `<tr><td>${index + 1} · ${escape(row.name)}</td><td>${fmt(row.demand_per_competitor)}</td><td class="money">${money(row.annual_revenue_eur)}</td></tr>`
+        `<tr><td><button class="place" data-id="${escape(row.id)}">B${index + 1} · ${escape(row.name)}</button></td><td>${fmt(row.demand_per_competitor)}</td><td class="money">${money(row.annual_revenue_eur)}</td></tr>`
     ).join('');
     const comparison = [
         ['Selección', selected],
