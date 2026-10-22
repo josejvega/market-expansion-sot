@@ -41,6 +41,14 @@ The quality report has one row per source with Bronze record counts, key-field
 nulls, duplicate records, source-to-Gold crossing counts and treatment notes.
 It is saved locally under `data/processed/quality/tabla_calidad_fuentes.parquet`
 and uploaded to the S3 `processed/quality/` prefix.
+The OSM gym coverage review is saved as
+`data/processed/quality/municipios_dudosos_gimnasios.parquet` and uploaded to
+the same S3 prefix. It uses a fixed internal reference of one gym per 10,000
+residents aged 18–50; this rate is a project assumption, not a statistic derived
+from OSM or an official coverage standard. A municipality is flagged for
+manual review when at least one gym is expected and its observed rate is below
+0.5 gyms per 10,000 residents aged 18–50. This is a review heuristic and does
+not remove any municipality from Gold.
 `notebooks/01_ingesta.ipynb` uploads immediately after each raw download when
 `SAVE_S3=true`; `notebooks/02_calidad.ipynb` similarly persists each cleaned
 dataset as it is produced. There are no separate upload cells.

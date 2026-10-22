@@ -10,6 +10,9 @@ GOLD_DIR = DATA_DIR / "processed" / "gold"
 GOLD_TABLE_PATH = GOLD_DIR / "tabla_oro_municipios_andalucia.parquet"
 QUALITY_DIR = DATA_DIR / "processed" / "quality"
 QUALITY_TABLE_PATH = QUALITY_DIR / "tabla_calidad_fuentes.parquet"
+DOUBTFUL_GYMS_TABLE_PATH = (
+    QUALITY_DIR / "municipios_dudosos_gimnasios.parquet"
+)
 
 MUNICIPALITY_BOUNDARIES_BRONZE_PATH = (
     RAW_DIR / "municipality_boundaries_andalusia.csv"
