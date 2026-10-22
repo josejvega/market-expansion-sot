@@ -28,9 +28,9 @@ def population_data() -> pd.DataFrame:
 def income_data() -> pd.DataFrame:
     return pd.DataFrame(
         {
-            "municipality_code": ["04001", "04001", "04002"],
-            "year": [2021, 2022, 2023],
-            "mean_net_income_per_person": [10000, 11000, 21000],
+            "municipality_code": ["04001", "04001", "04002", "04003"],
+            "year": [2021, 2022, 2023, 2024],
+            "mean_net_income_per_person": [10000, 11000, 21000, 9000],
         }
     )
 
@@ -108,7 +108,8 @@ class GoldTableTests(unittest.TestCase):
             result["municipality_code"].eq("04003")
         ].iloc[0]
         self.assertTrue(pd.isna(third_municipality["population_growth_pct"]))
-        self.assertTrue(pd.isna(third_municipality["income_year"]))
+        self.assertEqual(third_municipality["income_year"], 2024)
+        self.assertEqual(third_municipality["mean_net_income_per_person"], 9000)
         self.assertEqual(third_municipality["gyms_count"], 0)
         self.assertEqual(third_municipality["other_sports_facilities_count"], 0)
         self.assertTrue(
@@ -116,6 +117,20 @@ class GoldTableTests(unittest.TestCase):
                 third_municipality["gyms_per_10k_18_50"]
             )
         )
+
+    def test_excludes_municipalities_without_valid_income_data(self) -> None:
+        income_without_adra = income_data().loc[
+            income_data()["municipality_code"].ne("04003")
+        ]
+
+        result = create_gold_table(
+            population_data(),
+            income_without_adra,
+            gym_data(),
+        )
+
+        self.assertEqual(result["municipality_code"].tolist(), ["04001", "04002"])
+        self.assertFalse(result["municipality_code"].eq("04003").any())
 
     def test_rejects_duplicate_municipality_year_rows(self) -> None:
         duplicated_population = pd.concat(

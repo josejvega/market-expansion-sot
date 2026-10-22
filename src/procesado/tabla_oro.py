@@ -211,7 +211,7 @@ def create_gold_table(
     income: pd.DataFrame,
     gyms_with_municipality: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Create one municipality row with latest INE values and OSM counts."""
+    """Create Gold for municipalities with valid population and income data."""
     latest_population = _latest_population_and_growth(population)
     latest_income = _latest_income(income)
     facility_counts = _facility_counts(gyms_with_municipality)
@@ -219,7 +219,7 @@ def create_gold_table(
     gold = latest_population.merge(
         latest_income,
         on="municipality_code",
-        how="left",
+        how="inner",
         validate="one_to_one",
     ).merge(
         facility_counts,
