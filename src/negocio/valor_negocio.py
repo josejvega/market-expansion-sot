@@ -111,7 +111,11 @@ def evaluar(df, escenario="central", pesos=PESOS_CENTRAL, regla="C", con_candida
 
 def top5_baseline(df_eval):
     """Práctica actual del cliente: los 5 con más población 18-50."""
-    return df_eval.nlargest(5, "population_18_50")
+    return df_eval.sort_values(
+        ["population_18_50", "municipality_code"],
+        ascending=[False, True],
+        kind="stable",
+    ).head(5)
 
 
 def top5_facturacion(df_eval):

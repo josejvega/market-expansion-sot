@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from src.negocio import ejecutar
-from src.negocio.valor_negocio import competidores_ponderados, evaluar, top5_modelo
+from src.negocio.valor_negocio import competidores_ponderados, evaluar, top5_baseline, top5_modelo
 
 
 class BusinessIntegrationTests(unittest.TestCase):
@@ -90,6 +90,19 @@ class BusinessIntegrationTests(unittest.TestCase):
         evaluated = evaluar(df, con_candidatos=True)
         self.assertEqual(evaluated.candidate_flag.tolist(), [True, False, True])
         self.assertEqual(top5_modelo(evaluated).municipality_code.tolist(), ["04001"])
+
+    def test_baseline_selects_top_five_target_population_with_code_tiebreak(self):
+        evaluated = pd.DataFrame({
+            "municipality_code": ["00006", "00001", "00002", "00003", "00004", "00005"],
+            "population_18_50": [100, 100, 500, 400, 300, 200],
+        })
+
+        baseline = top5_baseline(evaluated)
+
+        self.assertEqual(
+            baseline["municipality_code"].tolist(),
+            ["00002", "00003", "00004", "00005", "00001"],
+        )
 
 
 if __name__ == "__main__":
