@@ -13,7 +13,6 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
 
 from src.common.storage import get_storage_settings
-from src.modelo.modelo import train_model
 from src.procesado.common.paths import MUNICIPALITY_BOUNDARIES_SILVER_PATH
 
 GOLD_REQUIRED_COLUMNS = {
@@ -182,6 +181,7 @@ def load_municipality_data(
     gold_path: Path,
     clusters_path: Path | None = None,
     boundaries_path: Path | None = None,
+    clusters_s3_key: str | None = None,
 ) -> tuple[pd.DataFrame, bool, str]:
     """Read Gold and Silver from configured S3, or local files when S3 is unset."""
     gold_path = Path(gold_path)
@@ -241,6 +241,27 @@ def load_municipality_data(
                 )
             ) from error
 
+        clusters = None
+        if clusters_s3_key:
+            try:
+                clusters_response = client.get_object(
+                    Bucket=settings.bucket_name,
+                    Key=clusters_s3_key,
+                )
+                with clusters_response["Body"] as body:
+                    clusters = pd.read_csv(
+                        BytesIO(body.read()),
+                        dtype={"municipality_code": "string"},
+                    )
+            except (BotoCoreError, ClientError) as error:
+                raise RuntimeError(
+                    _s3_read_error_message(
+                        settings.bucket_name,
+                        clusters_s3_key,
+                        error,
+                    )
+                ) from error
+
         source = f"S3 · {gold_key}"
     else:
         if not gold_path.is_file():
@@ -256,16 +277,15 @@ def load_municipality_data(
         boundaries = gpd.read_parquet(boundaries_path)
         source = f"Local · {gold_path.name}"
 
-    clusters = None
-    if clusters_path is not None:
-        clusters_path = Path(clusters_path)
-        if clusters_path.is_file():
-            clusters = pd.read_csv(
-                clusters_path,
-                dtype={"municipality_code": "string"},
-            )
-    if clusters is None:
-        clusters = train_model(gold).clusters
+        clusters = None
+        if clusters_path is not None:
+            clusters_path = Path(clusters_path)
+            if clusters_path.is_file():
+                clusters = pd.read_csv(
+                    clusters_path,
+                    dtype={"municipality_code": "string"},
+                )
+
     municipalities, has_clusters = prepare_municipality_data(gold, clusters)
     municipalities = add_municipality_coordinates(municipalities, boundaries)
     return municipalities, has_clusters, source

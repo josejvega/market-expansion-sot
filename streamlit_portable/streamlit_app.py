@@ -266,10 +266,12 @@ def load_data(
     clusters_path: str,
     gold_mtime_ns: int,
     clusters_mtime_ns: int | None,
+    clusters_s3_key: str | None,
 ) -> tuple[pd.DataFrame, bool, str]:
     return load_municipality_data(
         Path(gold_path),
         Path(clusters_path) if clusters_mtime_ns is not None else None,
+        clusters_s3_key=clusters_s3_key,
     )
 
 
@@ -285,6 +287,7 @@ def main() -> None:
     clusters_path = Path(
         os.environ.get("GYM_CLUSTERS_PATH", str(DEFAULT_CLUSTERS_PATH))
     ).expanduser()
+    clusters_s3_key = os.environ.get("GYM_CLUSTERS_S3_KEY")
     try:
         gold_mtime_ns = gold_path.stat().st_mtime_ns if gold_path.is_file() else 0
         clusters_mtime_ns = (
@@ -295,6 +298,7 @@ def main() -> None:
             str(clusters_path),
             gold_mtime_ns,
             clusters_mtime_ns,
+            clusters_s3_key,
         )
         study = build_study(municipalities, has_clusters, gold_source)
         html = render_study(study)

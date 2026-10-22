@@ -12,12 +12,13 @@ se leen de S3 y la app falla con un error claro si no hay acceso, sin usar una
 copia local que pueda estar desactualizada. Si `S3_BUCKET` no está configurado,
 se leen las copias locales. No hace falta crear ni mantener un JSON intermedio.
 
-Si existe `data/resultados/clusters.csv` localmente, incorpora los clusters por
-código municipal. Si no existe, entrena el modelo K-means del repositorio con
-la Gold recién cargada (incluida Gold leída desde S3). Así se calculan las
-candidatas reales del modelo y su ranking de negocio; no se sustituye por el
-top 5 de facturación general. El entrenamiento es determinista y usa las
-mismas reglas que `python -m src.modelo.modelo`.
+La app no entrena modelos ni requiere scikit-learn. Si se configura
+`GYM_CLUSTERS_S3_KEY`, lee de S3 un CSV de clusters ya calculado con las
+columnas `municipality_code` y `cluster`. Sin ese artefacto muestra el estudio
+sin recomendaciones basadas en clusters; no genera recomendaciones falsas.
+En modo local, puede leer un CSV precomputado indicado por
+`GYM_CLUSTERS_PATH`. El entrenamiento K-means se ejecuta fuera de Streamlit,
+como parte del flujo de preparación del modelo.
 
 ## Preparar los datos y ejecutar
 
@@ -47,9 +48,10 @@ python -m src.modelo.modelo
 ```
 
 También puede indicarse otra ubicación para Gold y clusters locales con
-`GYM_GOLD_PATH` y `GYM_CLUSTERS_PATH`. Si no hay CSV local, la app genera los
-clusters desde la Gold que está usando. Gold y los límites Silver sí son
-necesarios para cargar el estudio y su mapa.
+`GYM_GOLD_PATH` y `GYM_CLUSTERS_PATH`. Para usar recomendaciones de clusters en
+el despliegue S3, configura `GYM_CLUSTERS_S3_KEY` con la clave del CSV ya
+publicado. Gold y los límites Silver son necesarios para cargar el estudio y
+su mapa.
 
 La carpeta `data/` está excluida de Git. En EC2, adjunta a la instancia un rol
 IAM con permiso `s3:GetObject` sobre los objetos Gold y Silver:

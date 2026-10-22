@@ -185,37 +185,24 @@ class MunicipalityDataTests(unittest.TestCase):
         self.assertEqual(source, "Local · gold.parquet")
         self.assertIn("lat", result.columns)
 
-    def test_trains_clusters_from_gold_when_no_local_cluster_file_exists(self) -> None:
+    def test_does_not_train_clusters_when_no_cluster_artifact_exists(self) -> None:
         with TemporaryDirectory() as directory:
             gold_path = Path(directory) / "gold.parquet"
             boundaries_path = Path(directory) / "boundaries.parquet"
             gold_data().to_parquet(gold_path, index=False)
             boundary_data().to_parquet(boundaries_path, index=False)
-            generated_clusters = pd.DataFrame(
-                {
-                    "municipality_code": ["04001", "04002"],
-                    "cluster": [0, 1],
-                }
-            )
 
-            with (
-                patch(
-                    "streamlit_data.get_storage_settings",
-                    return_value=SimpleNamespace(bucket_name=None, region_name=None),
-                ),
-                patch(
-                    "streamlit_data.train_model",
-                    return_value=SimpleNamespace(clusters=generated_clusters),
-                ) as train_model,
+            with patch(
+                "streamlit_data.get_storage_settings",
+                return_value=SimpleNamespace(bucket_name=None, region_name=None),
             ):
                 result, has_clusters, _ = load_municipality_data(
                     gold_path,
                     boundaries_path=boundaries_path,
                 )
 
-        train_model.assert_called_once()
-        self.assertTrue(has_clusters)
-        self.assertEqual(result["cluster"].tolist(), [0, 1])
+        self.assertFalse(has_clusters)
+        self.assertNotIn("cluster", result.columns)
 
     def test_prefers_configured_s3_gold(self) -> None:
         gold_parquet = io.BytesIO()
@@ -239,24 +226,12 @@ class MunicipalityDataTests(unittest.TestCase):
                 ),
             ),
             patch("streamlit_data.boto3.client", return_value=s3_client),
-            patch(
-                "streamlit_data.train_model",
-                return_value=SimpleNamespace(
-                    clusters=pd.DataFrame(
-                        {
-                            "municipality_code": ["04001", "04002"],
-                            "cluster": [0, 1],
-                        }
-                    )
-                ),
-            ) as train_model,
         ):
             result, has_clusters, source = load_municipality_data(
                 Path("missing-gold.parquet")
             )
 
-        train_model.assert_called_once()
-        self.assertTrue(has_clusters)
+        self.assertFalse(has_clusters)
         self.assertEqual(result["municipality_code"].tolist(), ["04001", "04002"])
         self.assertEqual(source, "S3 · gold/missing-gold.parquet")
         self.assertEqual(result.loc[0, "lat"], 36.5)
@@ -265,6 +240,49 @@ class MunicipalityDataTests(unittest.TestCase):
             [
                 "gold/missing-gold.parquet",
                 "processed/silver/limites_municipales_andalucia.parquet",
+            ],
+        )
+
+    def test_loads_precomputed_clusters_from_s3(self) -> None:
+        gold_parquet = io.BytesIO()
+        gold_data().to_parquet(gold_parquet, index=False)
+        boundaries_parquet = io.BytesIO()
+        boundary_data().to_parquet(boundaries_parquet, index=False)
+        clusters_csv = io.BytesIO(
+            b"municipality_code,cluster\n04001,0\n04002,1\n"
+        )
+        gold_parquet.seek(0)
+        boundaries_parquet.seek(0)
+        s3_client = unittest.mock.MagicMock()
+        s3_client.get_object.side_effect = [
+            {"Body": gold_parquet},
+            {"Body": boundaries_parquet},
+            {"Body": clusters_csv},
+        ]
+
+        with (
+            patch(
+                "streamlit_data.get_storage_settings",
+                return_value=SimpleNamespace(
+                    bucket_name="test-bucket",
+                    region_name="eu-west-1",
+                ),
+            ),
+            patch("streamlit_data.boto3.client", return_value=s3_client),
+        ):
+            result, has_clusters, _ = load_municipality_data(
+                Path("missing-gold.parquet"),
+                clusters_s3_key="gold/clusters_municipios_andalucia.csv",
+            )
+
+        self.assertTrue(has_clusters)
+        self.assertEqual(result["cluster"].tolist(), [0, 1])
+        self.assertEqual(
+            [call.kwargs["Key"] for call in s3_client.get_object.call_args_list],
+            [
+                "gold/missing-gold.parquet",
+                "processed/silver/limites_municipales_andalucia.parquet",
+                "gold/clusters_municipios_andalucia.csv",
             ],
         )
 
