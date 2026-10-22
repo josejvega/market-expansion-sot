@@ -11,7 +11,7 @@ import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point, Polygon
 
-from botocore.exceptions import NoCredentialsError
+from botocore.exceptions import ClientError, NoCredentialsError
 from streamlit_data import (
     add_municipality_coordinates,
     load_municipality_data,
@@ -364,6 +364,92 @@ class MunicipalityDataTests(unittest.TestCase):
                 "results/municipios_candidatos.parquet",
             ],
         )
+
+    def test_missing_s3_candidate_artifact_does_not_block_dashboard_data(self) -> None:
+        gold_parquet = io.BytesIO()
+        gold_data().to_parquet(gold_parquet, index=False)
+        boundaries_parquet = io.BytesIO()
+        boundary_data().to_parquet(boundaries_parquet, index=False)
+        competitors_parquet = io.BytesIO()
+        competitor_data().to_parquet(competitors_parquet, index=False)
+        gold_parquet.seek(0)
+        boundaries_parquet.seek(0)
+        competitors_parquet.seek(0)
+        s3_client = unittest.mock.MagicMock()
+        s3_client.get_object.side_effect = [
+            {"Body": gold_parquet},
+            {"Body": boundaries_parquet},
+            {"Body": competitors_parquet},
+            ClientError(
+                {
+                    "Error": {
+                        "Code": "NoSuchKey",
+                        "Message": "The specified key does not exist.",
+                    },
+                    "ResponseMetadata": {"HTTPStatusCode": 404},
+                },
+                "GetObject",
+            ),
+        ]
+
+        with (
+            patch(
+                "streamlit_data.get_storage_settings",
+                return_value=SimpleNamespace(
+                    bucket_name="test-bucket",
+                    region_name="eu-west-1",
+                ),
+            ),
+            patch("streamlit_data.boto3.client", return_value=s3_client),
+        ):
+            result, has_candidates, source, competitors = load_municipality_data(
+                Path("missing-gold.parquet")
+            )
+
+        self.assertFalse(has_candidates)
+        self.assertEqual(source, "S3 · gold/missing-gold.parquet")
+        self.assertEqual(result["candidate_flag"].tolist(), [False, False])
+        self.assertTrue(result["cluster"].isna().all())
+        self.assertEqual(len(competitors), 1)
+
+    def test_s3_candidate_access_errors_are_not_treated_as_missing_artifacts(self) -> None:
+        gold_parquet = io.BytesIO()
+        gold_data().to_parquet(gold_parquet, index=False)
+        boundaries_parquet = io.BytesIO()
+        boundary_data().to_parquet(boundaries_parquet, index=False)
+        competitors_parquet = io.BytesIO()
+        competitor_data().to_parquet(competitors_parquet, index=False)
+        for buffer in (gold_parquet, boundaries_parquet, competitors_parquet):
+            buffer.seek(0)
+        s3_client = unittest.mock.MagicMock()
+        s3_client.get_object.side_effect = [
+            {"Body": gold_parquet},
+            {"Body": boundaries_parquet},
+            {"Body": competitors_parquet},
+            ClientError(
+                {
+                    "Error": {
+                        "Code": "AccessDenied",
+                        "Message": "Access denied.",
+                    },
+                    "ResponseMetadata": {"HTTPStatusCode": 403},
+                },
+                "GetObject",
+            ),
+        ]
+
+        with (
+            patch(
+                "streamlit_data.get_storage_settings",
+                return_value=SimpleNamespace(
+                    bucket_name="test-bucket",
+                    region_name="eu-west-1",
+                ),
+            ),
+            patch("streamlit_data.boto3.client", return_value=s3_client),
+            self.assertRaisesRegex(RuntimeError, "denegó la lectura"),
+        ):
+            load_municipality_data(Path("missing-gold.parquet"))
 
     def test_reports_missing_s3_credentials_without_local_fallback(self) -> None:
         s3_client = unittest.mock.MagicMock()

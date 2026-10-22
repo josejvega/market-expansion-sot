@@ -203,7 +203,7 @@ def prepare_model_candidates(
         joined["candidate_flag"].astype("boolean").fillna(False).astype(bool)
     )
     joined["cluster"] = joined["cluster"].astype("Int64")
-    return joined, not model.empty
+    return joined, True
 
 
 def prepare_competitor_records(points: gpd.GeoDataFrame) -> list[dict[str, object]]:
@@ -397,13 +397,19 @@ def load_municipality_data(
                 with candidates_response["Body"] as body:
                     candidates = pd.read_parquet(BytesIO(body.read()))
             except (BotoCoreError, ClientError) as error:
-                raise RuntimeError(
-                    _s3_read_error_message(
-                        settings.bucket_name,
-                        candidates_s3_key,
-                        error,
-                    )
-                ) from error
+                error_code = getattr(error, "response", {}).get(
+                    "Error", {}
+                ).get("Code")
+                if error_code in {"NoSuchKey", "404"}:
+                    candidates = None
+                else:
+                    raise RuntimeError(
+                        _s3_read_error_message(
+                            settings.bucket_name,
+                            candidates_s3_key,
+                            error,
+                        )
+                    ) from error
 
         source = f"S3 · {gold_key}"
     else:

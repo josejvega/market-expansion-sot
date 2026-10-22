@@ -97,6 +97,10 @@ class Portable2DashboardTests(unittest.TestCase):
         self.assertEqual(study["baseline"], expected_baseline)
         self.assertEqual(study["selection"], [])
         self.assertIn("falta el artefacto", study["metadata"]["selection_description"])
+        self.assertEqual(
+            study["metadata"]["missing_artifacts"],
+            ["results/municipios_candidatos.parquet"],
+        )
         first = study["municipalities"][0]
         self.assertAlmostEqual(first["lat"], 36.05)
         self.assertAlmostEqual(first["lon"], -1.95)
@@ -129,6 +133,8 @@ class Portable2DashboardTests(unittest.TestCase):
         )
 
         self.assertEqual(validate_study(study), study)
+        self.assertEqual(study["metadata"]["missing_artifacts"], [])
+        self.assertNotIn('class="data-warning"', render_study(study))
         candidates = [
             row for row in study["municipalities"] if row["candidate"]
         ]
@@ -172,13 +178,17 @@ class Portable2DashboardTests(unittest.TestCase):
         self.assertIn('"lat": 36.05', html)
         self.assertIn('"lon": -1.95', html)
         self.assertNotIn("__DATA__", html)
+        self.assertIn('class="data-warning" role="status"', html)
+        self.assertIn("results/municipios_candidatos.parquet", html)
+        self.assertIn("El resto del dashboard se carga", html)
+        self.assertLess(html.index('class="data-warning"'), html.index("<header>"))
         self.assertNotIn("__MARKET__", html)
         self.assertNotIn("__ANALYSIS__", html)
 
     def test_static_assets_match_integrated_portable2_files(self) -> None:
         web_dir = Path(__file__).resolve().parent / "web"
         expected_hashes = {
-            "streamlit.html": "013645e16bbc63e76fdc40ec98d318854d3ac1e805a0f5f33d8a8e39d985c898",
+            "streamlit.html": "4292548b23273e53ab68038e81856b81140b112ce1f29d02edec089082dd9865",
             "streamlit.css": "7cac206662c387b06a3134db7de68f98ffef33e9adb43d7ecec24e2e2328b638",
             "streamlit_analysis.js": "df7e560b61b16f0d4a40264162d941cfaf7111782d40efcdb3d80fdffb5fb13e",
         }

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from html import escape
 from pathlib import Path
 
 import pandas as pd
@@ -45,6 +46,7 @@ def build_study(
     weight_scenario: str = "central",
     revenue_rule: str = "C",
     competitors: list[dict[str, object]] | None = None,
+    candidates_artifact: str = MODEL_CANDIDATES_S3_KEY,
 ) -> dict:
     """Adapt repository Gold, Silver, and model outputs to the dashboard."""
     analysis = evaluar(
@@ -84,6 +86,9 @@ def build_study(
             if has_model_candidates
             else "No se publica una selección de candidatos porque falta el "
             "artefacto del modelo."
+        ),
+        "missing_artifacts": (
+            [] if has_model_candidates else [candidates_artifact]
         ),
         "revenue_method": (
             f"Escenario {scenario} con la regla de facturación "
@@ -295,8 +300,20 @@ def render_study(study: dict) -> str:
     analysis = (APP_DIR / "web" / "streamlit_analysis.js").read_text(
         encoding="utf-8"
     )
+    missing_artifacts = study["metadata"].get("missing_artifacts", [])
+    warning = ""
+    if missing_artifacts:
+        missing = ", ".join(escape(str(artifact)) for artifact in missing_artifacts)
+        warning = (
+            '<div class="data-warning" role="status">'
+            "<strong>Faltan datos del modelo.</strong> No está disponible "
+            f"{missing}. El resto del dashboard se carga, pero las "
+            "recomendaciones no estarán disponibles hasta publicar el artefacto."
+            "</div>"
+        )
     return (
         template.replace("__STYLES__", styles)
+        .replace("__NOTICE__", warning)
         .replace("__MARKET__", market_html)
         .replace("__ANALYSIS__", analysis)
         .replace("__DATA__", payload)
@@ -351,6 +368,7 @@ def main() -> None:
             has_model_candidates,
             gold_source,
             competitors=competitors,
+            candidates_artifact=candidates_s3_key or str(candidates_path),
         )
         html = render_study(study)
     except (OSError, ImportError, RuntimeError, ValueError) as error:

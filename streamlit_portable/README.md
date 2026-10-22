@@ -20,9 +20,12 @@ que no aparecen se muestran con la asignación como no publicada. En S3 la clave
 por defecto es `results/municipios_candidatos.parquet`; puede cambiarse con
 `GYM_CANDIDATES_S3_KEY`. En modo local, el archivo por defecto es
 `data/results/municipios_candidatos.parquet` y puede cambiarse con
-`GYM_CANDIDATES_PATH`. Si el artefacto no existe en S3, la app informa del
-error en vez de simular candidatos. Para mostrar el estudio sin candidatos,
-deja `GYM_CANDIDATES_S3_KEY` vacío. El modelo se ejecuta fuera de Streamlit.
+`GYM_CANDIDATES_PATH`. Si el artefacto aún no existe en S3, el resto del
+dashboard carga sin recomendaciones del modelo y lo indica explícitamente; no
+se inventan candidatos. Se muestra un aviso destacado en la parte superior
+con la clave que falta. Los errores de permisos u otros fallos de S3 siguen
+mostrándose como errores. Para desactivar la lectura del artefacto, deja
+`GYM_CANDIDATES_S3_KEY` vacío. El modelo se ejecuta fuera de Streamlit.
 
 La capa Silver
 `processed/silver/gyms_with_municipality_andalusia.parquet` aporta los puntos
