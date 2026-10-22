@@ -185,16 +185,29 @@ def _make_source_row(
             candidate_municipalities.difference(cleaned_municipality_codes)
         )
         if excluded_candidates:
-            decision_adopted = (
-                f"{decision_adopted} {excluded_candidates} códigos municipales "
-                "candidatos no superaron la limpieza y se excluyeron de Silver."
-            )
+            if excluded_candidates == 1:
+                exclusion_decision = (
+                    "1 código municipal candidato no superó la limpieza y se "
+                    "excluyó de Silver."
+                )
+            else:
+                exclusion_decision = (
+                    f"{excluded_candidates} códigos municipales candidatos no "
+                    "superaron la limpieza y se excluyeron de Silver."
+                )
+            decision_adopted = f"{decision_adopted} {exclusion_decision}"
 
     if not_crossed:
-        decision_adopted = (
-            f"{decision_adopted} {not_crossed} registros limpios no cruzaron con "
-            "Gold y se excluyeron de sus agregados."
-        )
+        if not_crossed == 1:
+            exclusion_decision = (
+                "1 registro limpio no cruzó con Gold y se excluyó de sus agregados."
+            )
+        else:
+            exclusion_decision = (
+                f"{not_crossed} registros limpios no cruzaron con Gold y se "
+                "excluyeron de sus agregados."
+            )
+        decision_adopted = f"{decision_adopted} {exclusion_decision}"
 
     return {
         "source": source,

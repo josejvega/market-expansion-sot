@@ -83,8 +83,8 @@ def quality_inputs() -> dict[str, pd.DataFrame]:
     )
     cnig_bronze = pd.DataFrame(
         {
-            "nationalCode": ["34010404001", "34010404002"],
-            "geometry": ["{}", "{}"],
+            "nationalCode": ["34010404001", "34010404002", "34010404003"],
+            "geometry": ["{}", "{}", "{}"],
         }
     )
     cnig_cleaned = pd.DataFrame(
@@ -125,6 +125,10 @@ class QualityTableTests(unittest.TestCase):
         self.assertEqual(report.loc["Population", "records_crossed"], 1)
         self.assertEqual(report.loc["Population", "records_not_crossed"], 1)
         self.assertEqual(report.loc["Population", "cross_pct"], 50.0)
+        self.assertIn(
+            "1 registro limpio no cruzó",
+            report.loc["Population", "decision_adopted"],
+        )
 
         self.assertEqual(report.loc["Income", "candidate_municipalities"], 3)
         self.assertEqual(report.loc["Income", "cleaned_municipalities"], 1)
@@ -143,6 +147,14 @@ class QualityTableTests(unittest.TestCase):
         self.assertEqual(report.loc["Gyms (OSM)", "records_not_crossed"], 1)
         self.assertEqual(report.loc["CNIG boundaries", "records_crossed"], 1)
         self.assertEqual(report.loc["CNIG boundaries", "records_not_crossed"], 1)
+        self.assertIn(
+            "1 código municipal candidato no superó",
+            report.loc["CNIG boundaries", "decision_adopted"],
+        )
+        self.assertIn(
+            "1 registro limpio no cruzó",
+            report.loc["CNIG boundaries", "decision_adopted"],
+        )
 
     def test_uploads_quality_report_to_processed_quality_prefix(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
