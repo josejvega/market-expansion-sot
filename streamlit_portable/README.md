@@ -54,11 +54,14 @@ python -m streamlit run streamlit_portable/streamlit_app.py
 En EC2 no guardes claves AWS en `.env`: asocia a la instancia un IAM role
 (instance profile). boto3 obtendrá credenciales temporales de ese rol.
 
-Para guardar o revisar las asignaciones de clusters por separado:
-
-```powershell
-python -m src.modelo.modelo
-```
+Para generar y publicar el artefacto de candidatos, ejecuta
+`notebooks/03_modelo.ipynb` interactivamente después de generar Gold. Revisa
+los gráficos de inercia y silhouette, elige `N_CLUSTERS` y ejecuta desde la
+celda de entrenamiento hasta la última. Con `SAVE_S3=true`, esa última celda
+sube `data/results/municipios_candidatos.parquet` a
+`results/municipios_candidatos.parquet` en el bucket configurado. El módulo
+`src.modelo.modelo` contiene funciones de entrenamiento y persistencia, pero
+no se ejecuta como comando independiente.
 
 También puede indicarse otra ubicación para Gold y candidatos locales con
 `GYM_GOLD_PATH` y `GYM_CANDIDATES_PATH`. Para usar las recomendaciones del
