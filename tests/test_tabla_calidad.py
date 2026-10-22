@@ -134,7 +134,10 @@ class QualityTableTests(unittest.TestCase):
         )
         self.assertEqual(report.loc["Income", "records_crossed"], 1)
         self.assertEqual(report.loc["Income", "cross_pct"], 100.0)
-        self.assertIn("2 candidate municipality codes", report.loc["Income", "decision_adopted"])
+        self.assertIn(
+            "2 códigos municipales candidatos",
+            report.loc["Income", "decision_adopted"],
+        )
 
         self.assertEqual(report.loc["Gyms (OSM)", "duplicate_records"], 1)
         self.assertEqual(report.loc["Gyms (OSM)", "records_not_crossed"], 1)

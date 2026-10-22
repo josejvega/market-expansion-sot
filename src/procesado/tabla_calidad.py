@@ -186,14 +186,14 @@ def _make_source_row(
         )
         if excluded_candidates:
             decision_adopted = (
-                f"{decision_adopted} {excluded_candidates} candidate municipality "
-                "codes did not pass cleaning and were excluded from Silver."
+                f"{decision_adopted} {excluded_candidates} códigos municipales "
+                "candidatos no superaron la limpieza y se excluyeron de Silver."
             )
 
     if not_crossed:
         decision_adopted = (
-            f"{decision_adopted} {not_crossed} cleaned records did not cross into "
-            "Gold and were excluded from its aggregates."
+            f"{decision_adopted} {not_crossed} registros limpios no cruzaron con "
+            "Gold y se excluyeron de sus agregados."
         )
 
     return {
@@ -246,9 +246,9 @@ def create_quality_table(
             cross_records=population_cleaned,
             gold_municipality_codes=gold_municipality_codes,
             decision_adopted=(
-                "Validated municipality-year observations are aggregated; rejected "
-                "rows are saved under processed/silver/failed/. Records for "
-                "municipalities without valid income are excluded from Gold."
+                "Se agregan las observaciones municipales por año validadas; las "
+                "filas rechazadas se guardan en processed/silver/failed/. Se "
+                "excluyen de Gold los municipios sin datos válidos de renta."
             ),
         ),
         _make_source_row(
@@ -271,9 +271,10 @@ def create_quality_table(
             cross_records=income_cleaned,
             gold_municipality_codes=gold_municipality_codes,
             decision_adopted=(
-                "Only valid municipal per-person income records are retained; "
-                "rejected rows are saved under processed/silver/failed/. "
-                "Municipalities without valid population are excluded from Gold."
+                "Se conservan únicamente los registros municipales válidos de renta "
+                "neta media por persona; las filas rechazadas se guardan en "
+                "processed/silver/failed/. Se excluyen de Gold los municipios sin "
+                "datos válidos de población."
             ),
         ),
         _make_source_row(
@@ -286,9 +287,10 @@ def create_quality_table(
             cross_records=gyms_with_municipality,
             gold_municipality_codes=gold_municipality_codes,
             decision_adopted=(
-                "Duplicate OSM objects keep the newest record; invalid records are "
-                "rejected, and spatially unmatched facilities remain in Silver with "
-                "a null municipality code and are excluded from Gold counts."
+                "De cada objeto OSM duplicado se conserva el registro más reciente; "
+                "los registros no válidos se rechazan. Los establecimientos sin "
+                "asignación espacial permanecen en Silver con el código municipal "
+                "nulo y se excluyen de los recuentos de Gold."
             ),
         ),
         _make_source_row(
@@ -301,9 +303,10 @@ def create_quality_table(
             cross_records=cnig_cleaned,
             gold_municipality_codes=gold_municipality_codes,
             decision_adopted=(
-                "Valid Andalusian boundaries support the gym spatial join; boundaries "
-                "for municipalities without valid population and income remain in "
-                "Silver but not in Gold."
+                "Los límites municipales válidos de Andalucía se utilizan para el "
+                "cruce espacial de gimnasios. Los límites de municipios sin datos "
+                "válidos de población y renta permanecen en Silver, pero no se "
+                "incluyen en Gold."
             ),
         ),
     ]
