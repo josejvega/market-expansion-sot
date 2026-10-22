@@ -2,6 +2,9 @@
 valor_negocio.py
 Demanda, facturación y viabilidad de un centro nuevo por municipio (T5),
 selección final (T6) y sensibilidad (T7).
+Las columnas facturacion_sin_tope_capacidad, ratio_capacidad,
+exceso_sobre_capacidad y colchon_demanda_pct son diagnósticas: no se usan
+para calcular facturación ni viabilidad.
 Entrada: DataFrame con una fila por municipio y, como mínimo:
   municipality_code, municipality_name, population_18_50,
   gyms_count, other_sports_facilities_count
@@ -48,6 +51,23 @@ def competidores_ponderados(df, pesos=PESOS_CENTRAL):
     pop = out["population_18_50"]
     out["comp_per_10k_18_50"] = np.where(pop > 0, out["competidores_pond"] / pop * 10_000, np.nan)
     out["flag_sin_competencia_osm"] = out["competidores_pond"].eq(0)
+    return generar_aviso_osm(out)
+
+
+def generar_aviso_osm(df):
+    """Marca municipios con cero gimnasios OSM y población objetivo relevante."""
+    out = df.copy()
+    gyms = out.get("gyms_count", out.get("comp_fitness_centre"))
+    if gyms is not None:
+        sin_gimnasios = pd.to_numeric(gyms, errors="raise").fillna(0).eq(0)
+        aviso = sin_gimnasios & pd.to_numeric(
+            out["population_18_50"], errors="raise"
+        ).ge(20_000)
+        out["aviso_calidad"] = np.where(
+            aviso, "Sin gimnasios en OSM: validar con una segunda fuente", ""
+        )
+    else:
+        out["aviso_calidad"] = ""
     return out
 
 
@@ -83,6 +103,13 @@ def facturacion(df, p, regla="C"):
                                        out["socios_captables"] / out["socios_potenciales"], 0)
     else:
         raise ValueError("Regla no válida: 'C' o 'demanda_no_cubierta'.")
+    out["facturacion_sin_tope_capacidad"] = (
+        out["socios_captables"] * p["ticket_mensual"] * 12
+    )
+    out["ratio_capacidad"] = out["socios_captables"] / p["capacidad"]
+    out["exceso_sobre_capacidad"] = (
+        out["socios_captables"] - p["capacidad"]
+    ).clip(lower=0)
     out["socios_centro"] = np.minimum(out["socios_captables"], p["capacidad"])
     out["facturacion_anual"] = out["socios_centro"] * p["ticket_mensual"] * 12
     return out
@@ -92,6 +119,12 @@ def viabilidad(df, p):
     out = df.copy()
     out["umbral_facturacion"] = p["coste_anual_club"]
     out["socios_break_even"] = p["coste_anual_club"] / (p["ticket_mensual"] * 12)
+    ratio_break_even = np.divide(
+        out["socios_break_even"], out["socios_captables"],
+        out=np.full(len(out), np.nan, dtype="float64"),
+        where=out["socios_captables"].to_numpy(dtype="float64") != 0,
+    )
+    out["colchon_demanda_pct"] = 1 - ratio_break_even
     out["margen_eur"] = out["facturacion_anual"] - p["coste_anual_club"]
     out["perdidas_eur"] = (-out["margen_eur"]).clip(lower=0)   # pérdidas operativas estimadas
     out["viable"] = out["margen_eur"] >= 0
@@ -111,24 +144,88 @@ def evaluar(df, escenario="central", pesos=PESOS_CENTRAL, regla="C", con_candida
 
 def top5_baseline(df_eval):
     """Práctica actual del cliente: los 5 con más población 18-50."""
+    return df_eval.nlargest(5, "population_18_50")
+
+
+def ordenar_seleccion_economica(df_eval):
+    """Ordena por ingresos limitados, desempates diagnósticos y código municipal."""
+    columnas = [
+        "facturacion_anual", "facturacion_sin_tope_capacidad", "demanda_por_comp",
+        "population_18_50",
+    ]
+    ascendente = [False] * len(columnas)
+    if "municipality_code" in df_eval:
+        columnas.append("municipality_code")
+        ascendente.append(True)
     return df_eval.sort_values(
-        ["population_18_50", "municipality_code"],
-        ascending=[False, True],
-        kind="stable",
-    ).head(5)
+        columnas, ascending=ascendente, na_position="last", kind="mergesort"
+    )
 
 
 def top5_facturacion(df_eval):
     """Referencia: los 5 viables que más facturan, sin usar clusters."""
     viables = df_eval[df_eval["viable"]]
-    return viables.sort_values(["facturacion_anual", "demanda_por_comp"], ascending=False).head(5)
+    return ordenar_seleccion_economica(viables).head(5)
 
 
 def top5_modelo(df_eval):
-    """Modelo A: candidatos viables, por facturación; desempate por demanda por competidor."""
+    """Modelo A: candidatos viables, con el mismo desempate que la referencia."""
     eleg = df_eval[df_eval["candidate_flag"] & df_eval["viable"]]
-    return eleg.sort_values(["facturacion_anual", "demanda_por_comp", "population_18_50"],
-                            ascending=False).head(5)
+    return ordenar_seleccion_economica(eleg).head(5)
+
+
+def top5_diversificado_clusters(df_eval):
+    """Selecciona un candidato viable por cluster y permite una sola repetición."""
+    if "cluster" not in df_eval:
+        raise ValueError("La selección diversificada requiere la columna cluster.")
+
+    validos = df_eval.loc[
+        df_eval["candidate_flag"].fillna(False).astype(bool)
+        & df_eval["viable"].fillna(False).astype(bool)
+    ]
+    validos = ordenar_seleccion_economica(validos)
+    clusters = sorted(df_eval["cluster"].dropna().unique())
+    registros = []
+    codigos_seleccionados = set()
+    clusters_sin_candidato = []
+
+    def clave_municipio(fila):
+        if "municipality_code" in fila.index:
+            return str(fila["municipality_code"])
+        return str(fila.name)
+
+    def incorporar(fila, motivo):
+        registro = fila.to_dict()
+        registro["motivo_seleccion"] = motivo
+        registros.append(registro)
+        codigos_seleccionados.add(clave_municipio(fila))
+
+    for cluster in clusters:
+        candidatos_cluster = validos.loc[validos["cluster"].eq(cluster)]
+        if candidatos_cluster.empty:
+            clusters_sin_candidato.append(cluster)
+            continue
+        if len(registros) < 5:
+            incorporar(
+                candidatos_cluster.iloc[0], "mejor_candidato_viable_del_cluster"
+            )
+
+    def restantes():
+        return validos.loc[
+            ~validos.apply(lambda fila: clave_municipio(fila) in codigos_seleccionados, axis=1)
+        ]
+
+    if registros:
+        candidatos_restantes = restantes()
+        if not candidatos_restantes.empty:
+            incorporar(candidatos_restantes.iloc[0], "unica_repeticion_mejor_restante")
+
+    seleccion = pd.DataFrame(registros, columns=[
+        *df_eval.columns, "motivo_seleccion",
+    ])
+    seleccion["posicion"] = range(1, len(seleccion) + 1)
+    seleccion.attrs["cluster_sin_candidato_viable"] = clusters_sin_candidato
+    return seleccion
 
 
 def comparar(base, modelo):
@@ -160,12 +257,23 @@ def sensibilidad(df):
         top = top5_modelo(ev).assign(
             escenario=f"pen={pen}|cuota={cuota}|atr={atr}|pesos={pesos}|regla={regla}")
         top["posicion"] = range(1, len(top) + 1)
+        top["aviso_calidad"] = top.get("aviso_calidad", "")
         filas.append(top[["escenario", "posicion", "municipality_code", "municipality_name",
-                          "facturacion_anual", "demanda_por_comp"]])
+                          "facturacion_anual", "demanda_por_comp", "aviso_calidad"]])
     detalle = pd.concat(filas, ignore_index=True)
     freq = (detalle.groupby(["municipality_code", "municipality_name"])
             .agg(apariciones=("escenario", "count"), posicion_media=("posicion", "mean"),
-                 fact_min=("facturacion_anual", "min"), fact_max=("facturacion_anual", "max"))
+                 fact_min=("facturacion_anual", "min"), fact_max=("facturacion_anual", "max"),
+                 aviso_calidad=("aviso_calidad", "first"))
             .reset_index().sort_values(["apariciones", "posicion_media"], ascending=[False, True]))
+    counts_by_weight = (detalle.assign(
+        pesos=detalle["escenario"].str.extract(r"\|pesos=([^|]+)", expand=False)
+    ).groupby(["municipality_code", "pesos"]).size().unstack(fill_value=0))
+    for peso in ESCENARIOS_PESOS:
+        freq[f"apariciones_{peso}"] = (
+            freq["municipality_code"].map(counts_by_weight[peso])
+            if peso in counts_by_weight else 0
+        )
+    freq["combinaciones_totales"] = n
     freq["robustez"] = freq["apariciones"].astype(str) + f" de {n}"
     return detalle, freq
