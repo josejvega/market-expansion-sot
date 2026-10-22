@@ -164,9 +164,13 @@ def add_municipality_coordinates(
     coordinates = boundary_data.loc[:, ["municipality_code", "lat", "lon"]]
 
     municipality_codes = municipalities["municipality_code"].astype("string")
-    if set(municipality_codes) != set(coordinates["municipality_code"]):
+    missing_codes = sorted(
+        set(municipality_codes).difference(coordinates["municipality_code"])
+    )
+    if missing_codes:
         raise ValueError(
-            "Silver de límites y Gold no contienen exactamente los mismos municipios."
+            "Faltan límites Silver para "
+            f"{len(missing_codes)} municipios de Gold: {missing_codes[:10]}."
         )
     return municipalities.merge(
         coordinates,

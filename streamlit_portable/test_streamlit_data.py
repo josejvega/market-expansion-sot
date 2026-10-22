@@ -116,10 +116,44 @@ class MunicipalityDataTests(unittest.TestCase):
             )
         )
 
-    def test_rejects_silver_boundary_code_coverage_mismatch(self) -> None:
+    def test_allows_silver_boundaries_for_municipalities_absent_from_gold(self) -> None:
         gold, _ = prepare_municipality_data(gold_data())
 
-        with self.assertRaisesRegex(ValueError, "exactamente los mismos municipios"):
+        boundaries = pd.concat(
+            [
+                boundary_data(),
+                gpd.GeoDataFrame(
+                    {
+                        "municipality_code": ["04999"],
+                        "geometry": [
+                            Polygon(
+                                [
+                                    (-4.0, 36.0),
+                                    (-3.0, 36.0),
+                                    (-3.0, 37.0),
+                                    (-4.0, 37.0),
+                                ]
+                            )
+                        ],
+                    },
+                    crs="EPSG:4326",
+                ),
+            ],
+            ignore_index=True,
+        )
+
+        result = add_municipality_coordinates(gold, boundaries)
+
+        self.assertEqual(result["municipality_code"].tolist(), ["04001", "04002"])
+        self.assertEqual(result["lat"].tolist(), [36.5, 37.5])
+
+    def test_rejects_gold_municipalities_without_silver_boundaries(self) -> None:
+        gold, _ = prepare_municipality_data(gold_data())
+
+        with self.assertRaisesRegex(
+            ValueError,
+            r"Faltan límites Silver para 1 municipios de Gold: \['04002'\]",
+        ):
             add_municipality_coordinates(gold, boundary_data().iloc[:1])
 
     def test_loads_gold_parquet_and_optional_cluster_csv(self) -> None:
