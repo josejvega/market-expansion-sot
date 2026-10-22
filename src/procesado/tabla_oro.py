@@ -26,6 +26,7 @@ GOLD_COLUMNS = [
     "mean_net_income_per_person",
     "gyms_count",
     "other_sports_facilities_count",
+    "gyms_per_10k_18_50",
 ]
 
 
@@ -210,7 +211,7 @@ def create_gold_table(
     income: pd.DataFrame,
     gyms_with_municipality: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Create one municipality row with latest INE values and OSM counts."""
+    """Create Gold for municipalities with valid population and income data."""
     latest_population = _latest_population_and_growth(population)
     latest_income = _latest_income(income)
     facility_counts = _facility_counts(gyms_with_municipality)
@@ -218,7 +219,7 @@ def create_gold_table(
     gold = latest_population.merge(
         latest_income,
         on="municipality_code",
-        how="left",
+        how="inner",
         validate="one_to_one",
     ).merge(
         facility_counts,
@@ -236,6 +237,13 @@ def create_gold_table(
     gold["population_growth_pct"] = gold["population_growth_pct"].astype("Float64")
     for column in ("gyms_count", "other_sports_facilities_count"):
         gold[column] = gold[column].fillna(0).astype("int64")
+    gold["gyms_per_10k_18_50"] = (
+        gold["gyms_count"]
+        .div(gold["population_18_50"])
+        .mul(10_000)
+        .where(gold["population_18_50"].gt(0))
+        .astype("Float64")
+    )
 
     return (
         gold.loc[:, GOLD_COLUMNS]

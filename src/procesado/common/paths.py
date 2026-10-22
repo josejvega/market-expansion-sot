@@ -1,4 +1,4 @@
-"""Canonical paths for the Bronze, Silver, and failed processing tables."""
+"""Canonical paths for Bronze, Silver, Gold, quality, and failed tables."""
 
 from pathlib import Path
 
@@ -8,6 +8,8 @@ SILVER_DIR = DATA_DIR / "processed" / "silver"
 FAILED_DIR = SILVER_DIR / "failed"
 GOLD_DIR = DATA_DIR / "processed" / "gold"
 GOLD_TABLE_PATH = GOLD_DIR / "tabla_oro_municipios_andalucia.parquet"
+QUALITY_DIR = DATA_DIR / "processed" / "quality"
+QUALITY_TABLE_PATH = QUALITY_DIR / "tabla_calidad_fuentes.parquet"
 
 MUNICIPALITY_BOUNDARIES_BRONZE_PATH = (
     RAW_DIR / "municipality_boundaries_andalusia.csv"
