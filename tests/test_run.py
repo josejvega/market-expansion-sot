@@ -1,3 +1,4 @@
+import os
 import sys
 import types
 import unittest
@@ -53,6 +54,49 @@ class ExecuteNotebooksTests(unittest.TestCase):
             },
         )
         self.assertEqual(kernelspec.install.call_count, 1)
+
+    def test_local_only_disables_s3_and_restores_environment(self):
+        notebook_client_class = MagicMock()
+        notebook_client = notebook_client_class.return_value
+        nbformat = types.ModuleType("nbformat")
+        nbformat.read = MagicMock(side_effect=["ingestion", "processing"])
+        nbclient = types.ModuleType("nbclient")
+        nbclient.NotebookClient = notebook_client_class
+        ipykernel = types.ModuleType("ipykernel")
+        ipykernel.__path__ = []
+        kernelspec = types.ModuleType("ipykernel.kernelspec")
+        kernelspec.install = MagicMock()
+
+        def assert_local_storage_settings():
+            self.assertEqual(os.environ["SAVE_LOCALLY"], "true")
+            self.assertEqual(os.environ["SAVE_S3"], "false")
+            self.assertEqual(os.environ["S3_BUCKET"], "")
+
+        notebook_client.execute.side_effect = assert_local_storage_settings
+
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "SAVE_LOCALLY": "false",
+                    "SAVE_S3": "true",
+                    "S3_BUCKET": "configured-bucket",
+                },
+            ),
+            patch.dict(
+                sys.modules,
+                {
+                    "nbformat": nbformat,
+                    "nbclient": nbclient,
+                    "ipykernel": ipykernel,
+                    "ipykernel.kernelspec": kernelspec,
+                },
+            ),
+        ):
+            run.execute_notebooks(local_only=True)
+            self.assertEqual(os.environ["SAVE_LOCALLY"], "false")
+            self.assertEqual(os.environ["SAVE_S3"], "true")
+            self.assertEqual(os.environ["S3_BUCKET"], "configured-bucket")
 
     def test_fails_if_a_notebook_is_missing(self):
         ipykernel = types.ModuleType("ipykernel")

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Callable, Iterator
@@ -40,7 +40,30 @@ def _current_python_kernel(
                 os.environ["JUPYTER_PATH"] = previous_jupyter_path
 
 
-def execute_notebooks(timeout: int = DEFAULT_TIMEOUT_SECONDS) -> None:
+@contextmanager
+def _local_only_environment() -> Iterator[None]:
+    setting_names = ("SAVE_LOCALLY", "SAVE_S3", "S3_BUCKET")
+    previous_settings = {
+        name: os.environ.get(name)
+        for name in setting_names
+    }
+    os.environ["SAVE_LOCALLY"] = "true"
+    os.environ["SAVE_S3"] = "false"
+    os.environ["S3_BUCKET"] = ""
+    try:
+        yield
+    finally:
+        for name, value in previous_settings.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def execute_notebooks(
+    timeout: int = DEFAULT_TIMEOUT_SECONDS,
+    local_only: bool = False,
+) -> None:
     """Execute the ingestion and processing notebooks from the project root."""
     try:
         import nbformat
@@ -52,22 +75,29 @@ def execute_notebooks(timeout: int = DEFAULT_TIMEOUT_SECONDS) -> None:
             "Install them with 'python -m pip install -r requirements.txt'."
         ) from error
 
-    with _current_python_kernel(install) as kernel_name:
-        for notebook_name in NOTEBOOKS:
-            notebook_path = PROJECT_ROOT / "notebooks" / notebook_name
-            if not notebook_path.is_file():
-                raise FileNotFoundError(f"Notebook not found: {notebook_path}")
+    storage_environment = (
+        _local_only_environment() if local_only else nullcontext()
+    )
+    with storage_environment:
+        with _current_python_kernel(install) as kernel_name:
+            for notebook_name in NOTEBOOKS:
+                notebook_path = PROJECT_ROOT / "notebooks" / notebook_name
+                if not notebook_path.is_file():
+                    raise FileNotFoundError(f"Notebook not found: {notebook_path}")
 
-            print(f"Executing {notebook_path.relative_to(PROJECT_ROOT)}...", flush=True)
-            notebook = nbformat.read(notebook_path, as_version=4)
-            client = NotebookClient(
-                notebook,
-                timeout=timeout,
-                kernel_name=kernel_name,
-                resources={"metadata": {"path": str(PROJECT_ROOT)}},
-            )
-            client.execute()
-            print(f"Finished {notebook_path.name}.", flush=True)
+                print(
+                    f"Executing {notebook_path.relative_to(PROJECT_ROOT)}...",
+                    flush=True,
+                )
+                notebook = nbformat.read(notebook_path, as_version=4)
+                client = NotebookClient(
+                    notebook,
+                    timeout=timeout,
+                    kernel_name=kernel_name,
+                    resources={"metadata": {"path": str(PROJECT_ROOT)}},
+                )
+                client.execute()
+                print(f"Finished {notebook_path.name}.", flush=True)
 
 
 def main() -> None:
@@ -83,11 +113,19 @@ def main() -> None:
             f"(default: {DEFAULT_TIMEOUT_SECONDS})."
         ),
     )
+    parser.add_argument(
+        "--local-only",
+        action="store_true",
+        help=(
+            "Force local persistence and disable S3 uploads and reads "
+            "for this run."
+        ),
+    )
     args = parser.parse_args()
     if args.timeout <= 0:
         parser.error("--timeout must be greater than zero.")
 
-    execute_notebooks(timeout=args.timeout)
+    execute_notebooks(timeout=args.timeout, local_only=args.local_only)
 
 
 if __name__ == "__main__":

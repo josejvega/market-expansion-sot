@@ -6,3 +6,5 @@ data
 tests/*
 !tests/test_run.py
 !tests/test_tabla_oro.py
+!tests/test_modelo.py
+!tests/test_negocio.py

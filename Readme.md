@@ -83,8 +83,98 @@ an error if a notebook cell fails. It creates a temporary Jupyter kernel using
 the same Python interpreter that launched `run.py` and does not overwrite the
 notebook files.
 
+To run the complete ingestion and processing flow without reading from or
+uploading anything to S3, use:
+
+```bash
+python run.py --local-only
+```
+
+This option overrides the storage settings for the duration of the run, saves
+raw and processed outputs locally, and produces the Gold table at
+`data/processed/gold/tabla_oro_municipios_andalucia.parquet`. It does not
+change `.env` or the process environment after the command finishes. Internet
+access to the source data providers is still required for fresh downloads.
+
 This also works on EC2 when the instance has the project dependencies installed,
 network access to the data sources, and AWS permissions for the configured S3
 bucket. Prefer an EC2 instance role for AWS credentials; boto3 uses its standard
 credential chain. Configure the storage variables in `.env` or in the process
 environment before running the command.
+
+## Municipality clustering
+
+After Gold has been generated, install the updated requirements and select the
+project's Python environment in `notebooks/03_modelo.ipynb`. Run its cells in
+order, or run the same model directly from the project root:
+
+```bash
+python -m pip install -r requirements.txt
+python -m src.modelo.modelo
+```
+
+The model notebook first displays the client's baseline: the five municipalities
+with the largest population aged 18-50, using the same Gold and `top5_baseline`
+function as business. This reference selection has no competition or viability
+filter and creates no additional output file. Economic comparison remains in
+the business notebook. The model CLI runs clustering only.
+
+This is a separate local-only stage: `run.py` still executes ingestion and
+quality only. The model reads the existing Gold at
+`data/processed/gold/tabla_oro_municipios_andalucia.parquet`, does not modify it,
+and writes only `data/resultados/clusters.csv`. The CSV contains exactly 785
+unique municipality codes and two columns, `municipality_code` and `cluster`.
+Read it with `pd.read_csv(path, dtype={"municipality_code": "string"})` to
+preserve leading zeros. Cluster labels are group identifiers, not a ranking.
+
+The implementation is in `src/modelo/modelo.py`. Features are
+`log1p(population_18_50)`, `population_growth_pct` and
+`mean_net_income_per_person`, followed by `StandardScaler`. Growth refers to
+total population, not specifically ages 18-50. Missing income is imputed with
+the observed municipal median and affected codes are logged and displayed in
+the notebook; missing population or growth, invalid codes, duplicate keys,
+non-finite values and a universe other than 785 municipalities raise errors.
+Competition counts are never model inputs.
+
+K-means uses `random_state=42` and `n_init=20`. For k=2..6, the model reports
+inertia, silhouette and minimum/maximum cluster sizes. It selects the highest
+silhouette among solutions with at least 30 municipalities in every cluster,
+preferring smaller k on exact ties. If no solution qualifies, it raises an
+error instead of exporting unreliable groups. The notebook shows cluster
+profiles in original units; these use imputed income where applicable.
+Reproduction requires the same Gold and dependency versions.
+
+Candidates, weighted competition (1 / 0.1), revenue, viability, top-five
+selection, baseline comparison and business sensitivity are deliberately left
+to the downstream business module. Clustering metrics do
+not demonstrate economic improvement or predict actual profitability.
+
+## Business integration
+
+After generating clusters, run `notebooks/04_negocio.ipynb` or:
+
+```bash
+python -m src.negocio.ejecutar
+```
+
+Business reads the same local Gold and prefers `data/resultados/clusters.csv`
+over the optional Parquet alternative. Missing inputs, invalid codes or labels,
+and differences between the 785 Gold and cluster municipality codes raise errors
+instead of producing a partial comparison. No provisional Gold is used.
+
+The central competition measure is exactly
+`gyms_count + 0.1 * other_sports_facilities_count`. Gold does not distinguish
+sports centres from outdoor stations, so its aggregate is used directly, without
+inventing a breakdown or adding facilities not present in ingestion. Scenarios
+use weights 1/0 (gyms only), 1/0.1 (central), and 1/1 (all equal). Different
+weights within the aggregate are rejected. Existing business formulas, economic
+assumptions and sensitivity scenarios are otherwise unchanged.
+
+Outputs are local in `data/outputs/`, including `baseline_central.csv`,
+`seleccion_modelo_central.csv`, `comparacion_central.csv`,
+`sensibilidad_detalle.csv` and `sensibilidad_frecuencias.csv`. Baseline selects
+the five largest target populations; the model selects up to five viable
+candidates below their cluster's mean weighted competition per 10,000 people.
+There is no forced filling of five places when fewer qualify. A full local
+sequence is notebooks 01 to 04, or `python run.py --local-only` followed by
+`python -m src.modelo.modelo` and `python -m src.negocio.ejecutar`.
