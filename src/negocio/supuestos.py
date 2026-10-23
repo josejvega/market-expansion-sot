@@ -76,25 +76,19 @@ SUPUESTOS = {
     },
 }
 
-
-PESOS_CENTRAL = "central"
+# Gold usa gyms_count y other_sports_facilities_count: pesos 1 / 0,1.
+# Los tipos historicos se mantienen para los escenarios; los dos tipos de otras
+# instalaciones deben tener el mismo peso porque Gold no permite separarlos.
+#   fitness_centre  = gimnasio puro
+#   sports_centre   = pabellón / centro deportivo (tenis, pádel, fútbol, karting...)
+#   fitness_station = instalación al aire libre
+# Los escenarios extremos se usan en la sensibilidad.
 ESCENARIOS_PESOS = {
-    "solo_gimnasios": {
-        "fitness_centre": 1.0,
-        "sports_centre": 0.0,
-        "fitness_station": 0.0,
-    },
-    "central": {
-        "fitness_centre": 1.0,
-        "sports_centre": 0.1,
-        "fitness_station": 0.1,
-    },
-    "todo_igual": {
-        "fitness_centre": 1.0,
-        "sports_centre": 1.0,
-        "fitness_station": 1.0,
-    },
+    "solo_gimnasios": {"fitness_centre": 1.0, "sports_centre": 0.0, "fitness_station": 0.0},
+    "central":        {"fitness_centre": 1.0, "sports_centre": 0.1, "fitness_station": 0.1},
+    "todo_igual":     {"fitness_centre": 1.0, "sports_centre": 1.0, "fitness_station": 1.0},
 }
+PESOS_CENTRAL = "central"
 
 
 def parametros(escenario="central", **cambios):
