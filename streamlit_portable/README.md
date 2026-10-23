@@ -102,13 +102,15 @@ La interfaz portable2 incluye campos que Gold no tiene. Las coordenadas se
 calculan a partir de los polígonos municipales Silver; el punto representativo
 solo localiza el municipio, no una ubicación de gimnasio. Gold y el modelo no
 publican un score de recomendación, así que la tabla de selección no muestra
-una puntuación inventada. Los datos turísticos, secciones censales, auditorías
-e intervalos de ingresos tampoco están disponibles. La facturación y
-viabilidad son escenarios, no ventas observadas ni predicciones. El modelo no
-publica un score de recomendación; la posición de la tabla refleja el orden de
-selección económica y el simulador calcula una puntuación independiente con
-los pesos elegidos por el usuario. El punto de equilibrio usa los costes fijos,
-cuota anual y capacidad del escenario central; como no hay porcentaje de costes
-variables documentado, debe introducirse antes de obtener el cálculo. Los
-recuentos de competencia proceden de OpenStreetMap y no permiten concluir que
-un municipio carezca realmente de competidores.
+una puntuación inventada. La posición refleja el orden de selección económica;
+el simulador calcula una puntuación independiente con los pesos elegidos por
+el usuario. Los datos turísticos, secciones censales, auditorías e intervalos
+de ingresos tampoco están disponibles. La facturación y viabilidad son
+escenarios, no ventas observadas ni predicciones. El punto de equilibrio usa
+los costes fijos, cuota anual y capacidad del escenario central. Como el
+proyecto no documenta un porcentaje de costes variables, la interfaz muestra
+inicialmente 5% editable solo como ejemplo, no como dato real. La gráfica
+recorre el rango de costes variables del 0% al 30% y sombrea el tramo en que
+los abonados estimados no superan la capacidad indicada. Los recuentos de
+competencia proceden de OpenStreetMap y no permiten concluir que un municipio
+carezca realmente de competidores.

@@ -58,15 +58,88 @@ if (typeof document !== 'undefined') {
 
     const finance = DATA.finance || {};
     setValue('fixed-cost', finance.annual_fixed_cost_eur);
-    setValue('variable-cost', finance.variable_cost_ratio == null ? null : finance.variable_cost_ratio * 100);
+    setValue('variable-cost', finance.variable_cost_ratio == null ? 5 : finance.variable_cost_ratio * 100);
     setValue('finance-ticket', finance.annual_ticket_eur);
     setValue('capacity', finance.capacity_members);
     el('finance-data-note').textContent = [
         `Referencias del escenario central: costes fijos ${money(finance.annual_fixed_cost_eur)}, cuota anual ${money(finance.annual_ticket_eur)} y capacidad ${fmt(finance.capacity_members)} abonados.`,
         finance.variable_cost_ratio == null
-            ? 'El proyecto no aporta un porcentaje de costes variables; introdúcelo para calcular el punto de equilibrio. No se asume que sea 0%.'
+            ? 'No hay un porcentaje de costes variables documentado para el proyecto. Se muestra 5% solo como ejemplo editable, no como dato real.'
             : 'El porcentaje de costes variables se ha cargado desde los supuestos del escenario.'
     ].join(' ');
+    function renderBreakEvenChart(fixed, ticket, capacity, variablePercent) {
+        const chart = el('break-even-chart');
+        if (
+            fixed == null || fixed < 0 || ticket == null || ticket <= 0
+            || capacity == null || capacity <= 0
+        ) {
+            chart.replaceChildren();
+            el('break-even-chart-note').textContent =
+                'Introduce costes fijos, cuota anual y capacidad positivos para ver el punto dulce.';
+            return;
+        }
+
+        const maxVariablePercent = 30;
+        const width = 760, left = 82, right = 24, plotWidth = width - left - right;
+        const panelHeight = 142, panelTops = [42, 256];
+        const x = percent => left + percent / maxVariablePercent * plotWidth;
+        const revenueAt = percent => fixed / (1 - percent / 100);
+        const membersAt = percent => Math.ceil(revenueAt(percent) / ticket);
+        const maxRevenue = Math.max(revenueAt(maxVariablePercent) * 1.08, 1);
+        const maxMembers = Math.max(capacity, membersAt(maxVariablePercent)) * 1.08;
+        const thresholdPercent = (1 - fixed / (ticket * capacity)) * 100;
+        const feasibleEnd = Math.max(0, Math.min(maxVariablePercent, thresholdPercent));
+        const currentX = variablePercent != null && variablePercent >= 0
+            && variablePercent <= maxVariablePercent ? x(variablePercent) : null;
+        const panels = [
+            {
+                top: panelTops[0],
+                title: 'Facturación mínima anual',
+                values: Array.from({length: 31}, (_, percent) => revenueAt(percent)),
+                max: maxRevenue,
+                color: '#a100ff',
+                label: value => `${fmt(value / 1000, 0)} k€`,
+                capacity: null
+            },
+            {
+                top: panelTops[1],
+                title: 'Abonados necesarios para cubrir costes',
+                values: Array.from({length: 31}, (_, percent) => membersAt(percent)),
+                max: maxMembers,
+                color: '#2976ad',
+                label: value => fmt(value),
+                capacity
+            }
+        ];
+        const elements = panels.map(panel => {
+            const y = value => panel.top + panelHeight - value / panel.max * panelHeight;
+            const points = panel.values.map((value, index) =>
+                `${x(index).toFixed(1)},${y(value).toFixed(1)}`
+            ).join(' ');
+            const grid = [0, .5, 1].map(fraction => {
+                const position = panel.top + panelHeight * (1 - fraction);
+                return `<line x1="${left}" y1="${position}" x2="${width-right}" y2="${position}" stroke="#e5e1e8"/><text x="${left-9}" y="${position+4}" text-anchor="end" fill="#66616c" font-size="11">${panel.label(panel.max*fraction)}</text>`;
+            }).join('');
+            const capacityLine = panel.capacity == null ? '' :
+                `<line x1="${left}" y1="${y(panel.capacity)}" x2="${width-right}" y2="${y(panel.capacity)}" stroke="#8a5900" stroke-dasharray="5 4"/><text x="${width-right-3}" y="${y(panel.capacity)-5}" text-anchor="end" fill="#8a5900" font-size="11">Capacidad ${fmt(panel.capacity)}</text>`;
+            const markerValue = variablePercent == null ? null :
+                (panel.capacity == null ? revenueAt(variablePercent) : membersAt(variablePercent));
+            const marker = currentX == null ? '' :
+                `<line x1="${currentX}" y1="${panel.top}" x2="${currentX}" y2="${panel.top+panelHeight}" stroke="#17151b" stroke-dasharray="3 4"/><circle cx="${currentX}" cy="${y(markerValue)}" r="5" fill="#17151b"/>`;
+            return `<text x="${left}" y="${panel.top-15}" fill="#17151b" font-size="13" font-weight="600">${panel.title}</text><rect x="${left}" y="${panel.top}" width="${x(feasibleEnd)-left}" height="${panelHeight}" fill="#dff2ed"/>${grid}${capacityLine}<polyline points="${points}" fill="none" stroke="${panel.color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>${marker}`;
+        }).join('');
+        const xTicks = [0, 5, 10, 15, 20, 25, 30].map(percent => {
+            const position = x(percent);
+            return `<line x1="${position}" y1="${panelTops[1]+panelHeight}" x2="${position}" y2="${panelTops[1]+panelHeight+5}" stroke="#66616c"/><text x="${position}" y="${panelTops[1]+panelHeight+21}" text-anchor="middle" fill="#66616c" font-size="11">${percent}%</text>`;
+        }).join('');
+        chart.innerHTML = `<svg viewBox="0 0 ${width} 450" role="img" aria-label="Facturación mínima y abonados necesarios para cada porcentaje de costes variables del 0 al 30 por ciento. Verde indica valores compatibles con la capacidad.">${elements}${xTicks}<text x="${left+plotWidth/2}" y="442" text-anchor="middle" fill="#66616c" font-size="11">Costes variables como porcentaje de las ventas</text></svg>`;
+        const note = thresholdPercent < 0
+            ? 'No hay un porcentaje viable en el rango mostrado: incluso con costes variables del 0%, los abonados necesarios superan la capacidad.'
+            : thresholdPercent <= maxVariablePercent
+                ? `Con estos supuestos, el punto dulce llega hasta aproximadamente ${fmt(thresholdPercent, 1)}% de costes variables: por encima, los abonados necesarios superan la capacidad de ${fmt(capacity)}.`
+                : `Todo el rango mostrado (0–${maxVariablePercent}%) queda dentro de la capacidad de ${fmt(capacity)}.`;
+        el('break-even-chart-note').textContent = `${note}${currentX == null ? ' El porcentaje actual está fuera del rango de la gráfica.' : ` El ejemplo actual está marcado en ${fmt(variablePercent, 1)}%.`}`;
+    }
     function updateFinance() {
         const fixed = readNumber('fixed-cost'), variable = readNumber('variable-cost');
         const ticket = readNumber('finance-ticket'), capacity = readNumber('capacity');
@@ -89,6 +162,7 @@ if (typeof document !== 'undefined') {
         el('profitability-answer').textContent = explanation;
         el('profitability-answer-faq').textContent = explanation;
         el('capacity-note').textContent = result?.capacityExceeded ? 'El punto de equilibrio supera la capacidad indicada.' : 'Umbral operativo: no incluye inversión inicial, impuestos ni costes no incorporados a los parámetros.';
+        renderBreakEvenChart(fixed, ticket, capacity, variable);
     }
     for (const id of ['fixed-cost', 'variable-cost', 'finance-ticket', 'capacity']) el(id).addEventListener('input', updateFinance);
     updateFinance();

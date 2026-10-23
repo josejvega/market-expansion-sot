@@ -13,4 +13,5 @@
     [role=tabpanel]{counter-reset:section}
     h2{display:flex;align-items:center;gap:10px;counter-increment:section}
     h2::before{content:counter(section);display:inline-grid;place-items:center;flex:0 0 28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-size:14px}
+    .break-even-chart{width:100%;overflow-x:auto;background:#fff;border:1px solid var(--line);padding:12px 8px;margin-top:12px}.break-even-chart svg{display:block;width:100%;min-width:560px;height:auto}.estimate-equation{flex-wrap:wrap}.fraction{min-width:min(100%,390px)}.numerator,.denominator{line-height:1.4}
   

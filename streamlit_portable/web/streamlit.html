@@ -33,6 +33,8 @@
         <p class="caption" id="finance-data-note"></p>
         <div class="controls-grid"><label>Costes fijos anuales (EUR)<input id="fixed-cost" type="number" min="0" step="1000" placeholder="Sin dato"></label><label>Costes variables (% de ventas)<input id="variable-cost" type="number" min="0" max="100" step="1" placeholder="Introduce un porcentaje"></label><label>Cuota anual por abonado (EUR)<input id="finance-ticket" type="number" min="0" step="0.01" placeholder="Sin dato"></label><label>Capacidad maxima (abonados)<input id="capacity" type="number" min="0" step="1" placeholder="Sin dato"></label></div>
         <div class="scenario-summary"><div><strong id="breakeven-revenue">n/d</strong><span>Facturacion anual minima</span></div><div><strong id="breakeven-members">n/d</strong><span>Abonados para cubrir costes</span></div></div><p class="caption" id="profitability-answer" role="status"></p><p class="caption" id="capacity-note"></p>
+        <h3>Zona compatible con la capacidad</h3><p class="caption">El tramo verde indica los porcentajes de costes variables en que los abonados para cubrir costes no superan la capacidad del centro. El punto marcado es el valor editable de arriba.</p>
+        <div id="break-even-chart" class="break-even-chart" role="img" aria-label="Gráfica de punto de equilibrio y capacidad"></div><p class="caption" id="break-even-chart-note" role="status"></p>
       </section>
       <section class="analysis-band"><h2>Preguntas del cliente</h2>
         <details class="question" open><summary>Cuantos de los municipios sin competencia lo estan realmente?</summary><p id="competition-answer"></p><ul id="market-checks"></ul></details>
