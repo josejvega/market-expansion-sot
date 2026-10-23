@@ -5,6 +5,7 @@ venv/
 data
 tests/*
 !tests/test_modelo.py
+!tests/test_negocio_ejecutar.py
 !tests/test_run.py
 !tests/test_tabla_calidad.py
 !tests/test_tabla_municipios_dudosos.py

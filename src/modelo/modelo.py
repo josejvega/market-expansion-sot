@@ -22,6 +22,8 @@ from src.procesado.common.paths import DATA_DIR
 RESULTS_DIR = DATA_DIR / "results"
 RESULTS_PREFIX = "results"
 MUNICIPALITY_CANDIDATES_FILENAME = "municipios_candidatos.parquet"
+CLUSTER_ASSIGNMENTS_FILENAME = "clusters.parquet"
+CLUSTER_ASSIGNMENTS_PATH = RESULTS_DIR / CLUSTER_ASSIGNMENTS_FILENAME
 
 
 def obtener_inercias(k_values: Iterable[int], X_escalado: np.ndarray) -> list[float]:
@@ -81,6 +83,68 @@ def crear_modelo_kmeans(n_clusters: int, X_escalado: np.ndarray) -> KMeans:
         random_state=0,
         n_init=10,
     ).fit(X_escalado)
+
+
+def guardar_asignaciones_clusters(municipios: pd.DataFrame) -> pd.DataFrame:
+    """Persist cluster labels for every municipality included in the model."""
+    necesarias = {"municipality_code", "cluster"}
+    faltan = sorted(necesarias.difference(municipios.columns))
+    if faltan:
+        raise ValueError(
+            "Faltan columnas para guardar clusters: " + ", ".join(faltan)
+        )
+
+    asignaciones = municipios.loc[
+        :, ["municipality_code", "cluster"]
+    ].copy()
+    if asignaciones.empty:
+        raise ValueError("No hay municipios con clusters para guardar.")
+
+    codes = asignaciones["municipality_code"].astype("string")
+    if not codes.str.fullmatch(r"\d{5}").fillna(False).all():
+        raise ValueError("municipality_code debe contener cinco dígitos.")
+    if codes.duplicated().any():
+        raise ValueError("municipality_code duplicado en las asignaciones de clusters.")
+
+    labels = pd.to_numeric(asignaciones["cluster"], errors="raise")
+    if (
+        labels.isna().any()
+        or not np.isfinite(labels.astype(float)).all()
+        or labels.lt(0).any()
+        or labels.mod(1).ne(0).any()
+    ):
+        raise ValueError("cluster debe ser un entero no negativo.")
+
+    asignaciones["municipality_code"] = codes
+    asignaciones["cluster"] = labels.astype("int64")
+    settings = get_storage_settings()
+    if not settings.save_locally and not settings.save_s3:
+        raise RuntimeError(
+            "Las asignaciones de clusters requieren SAVE_LOCALLY o SAVE_S3."
+        )
+
+    def persist(output_path: Path) -> None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        asignaciones.to_parquet(
+            output_path,
+            index=False,
+            compression="snappy",
+        )
+        if settings.save_s3:
+            upload_files_to_s3(
+                [output_path],
+                prefix=RESULTS_PREFIX,
+                bucket_name=settings.bucket_name,
+                region_name=settings.region_name,
+            )
+
+    if settings.save_locally:
+        persist(CLUSTER_ASSIGNMENTS_PATH)
+    elif settings.save_s3:
+        with TemporaryDirectory(prefix="market-expansion-clusters-") as directory:
+            persist(Path(directory) / CLUSTER_ASSIGNMENTS_FILENAME)
+
+    return asignaciones
 
 
 def graficar_metricas_kmeans(
@@ -195,11 +259,46 @@ def seleccionar_y_guardar_municipios_candidatos(
         municipios,
         etiquetas_cluster,
     )
+    guardar_municipios_candidatos(candidatos)
+    return candidatos
+
+
+def guardar_municipios_candidatos(candidatos: pd.DataFrame) -> pd.DataFrame:
+    """Persist the selected municipalities for downstream consumers such as Streamlit."""
+    necesarias = {"municipality_code", "cluster"}
+    faltan = sorted(necesarias.difference(candidatos.columns))
+    if faltan:
+        raise ValueError(
+            "Faltan columnas para guardar candidatos: " + ", ".join(faltan)
+        )
+
+    guardados = candidatos.copy()
+    codes = guardados["municipality_code"].astype("string")
+    if not codes.str.fullmatch(r"\d{5}").fillna(False).all():
+        raise ValueError("municipality_code debe contener cinco dígitos.")
+    if codes.duplicated().any():
+        raise ValueError("municipality_code duplicado en los candidatos.")
+
+    labels = pd.to_numeric(guardados["cluster"], errors="raise")
+    if (
+        labels.isna().any()
+        or not np.isfinite(labels.astype(float)).all()
+        or labels.lt(0).any()
+        or labels.mod(1).ne(0).any()
+    ):
+        raise ValueError("cluster debe ser un entero no negativo.")
+
+    guardados["municipality_code"] = codes
+    guardados["cluster"] = labels.astype("int64")
     settings = get_storage_settings()
+    if not settings.save_locally and not settings.save_s3:
+        raise RuntimeError(
+            "Los candidatos requieren SAVE_LOCALLY o SAVE_S3."
+        )
 
     def persist(output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        candidatos.to_parquet(output_path, index=False, compression="snappy")
+        guardados.to_parquet(output_path, index=False, compression="snappy")
         if settings.save_s3:
             upload_files_to_s3(
                 [output_path],
@@ -214,7 +313,7 @@ def seleccionar_y_guardar_municipios_candidatos(
         with TemporaryDirectory(prefix="market-expansion-results-") as directory:
             persist(Path(directory) / MUNICIPALITY_CANDIDATES_FILENAME)
 
-    return candidatos
+    return guardados
 
 
 def graficar_clusters_interactivo(

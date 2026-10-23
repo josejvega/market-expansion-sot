@@ -1,4 +1,4 @@
-"""Execute the project's ingestion and processing notebooks in order."""
+"""Execute the project's notebooks in pipeline order."""
 
 from __future__ import annotations
 
@@ -10,7 +10,12 @@ from tempfile import TemporaryDirectory
 from typing import Callable, Iterator
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-NOTEBOOKS = ("01_ingesta.ipynb", "02_calidad.ipynb")
+NOTEBOOKS = (
+    "01_ingesta.ipynb",
+    "02_calidad.ipynb",
+    "03_modelo.ipynb",
+    "04_negocio.ipynb",
+)
 DEFAULT_TIMEOUT_SECONDS = 3600
 
 
@@ -41,7 +46,7 @@ def _current_python_kernel(
 
 
 def execute_notebooks(timeout: int = DEFAULT_TIMEOUT_SECONDS) -> None:
-    """Execute the ingestion and processing notebooks from the project root."""
+    """Execute all pipeline notebooks from the project root."""
     try:
         import nbformat
         from ipykernel.kernelspec import install
@@ -72,7 +77,7 @@ def execute_notebooks(timeout: int = DEFAULT_TIMEOUT_SECONDS) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run the ingestion and processing notebooks in sequence."
+        description="Run all project notebooks in pipeline order."
     )
     parser.add_argument(
         "--timeout",

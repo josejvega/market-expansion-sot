@@ -4,17 +4,23 @@ Uso (desde la raíz del repo):  python -m src.negocio.ejecutar
 
 Entrada:
   - data/processed/gold/tabla_oro_municipios_andalucia.parquet
-  - data/resultados/clusters.csv (salida del modelo; parquet como alternativa)
+  - data/results/clusters.parquet (asignaciones del notebook del modelo)
 Salida (data/outputs/, ignorado por Git):
   - municipios_evaluados_<pesos>.csv, baseline_<pesos>.csv, top_facturacion_<pesos>.csv
   - si hay clusters: seleccion_modelo_<pesos>.csv, comparacion_<pesos>.csv,
     sensibilidad_detalle.csv, sensibilidad_frecuencias.csv
 """
+import io
 from pathlib import Path
+
+import boto3
 import numpy as np
 import pandas as pd
+from botocore.exceptions import BotoCoreError, ClientError
 
-from src.modelo.modelo import CLUSTERS_PATH, EXPECTED_MUNICIPALITIES
+from src.common.storage import get_storage_settings, s3_uri_for
+from src.common.upload_to_s3 import parse_s3_uri
+from src.modelo.modelo import CLUSTER_ASSIGNMENTS_PATH, RESULTS_PREFIX
 from src.procesado.common.paths import DATA_DIR, GOLD_TABLE_PATH
 
 from .supuestos import parametros
@@ -25,7 +31,6 @@ from .valor_negocio import (
 
 ORO = GOLD_TABLE_PATH
 QUALITY_TABLE_PATH = DATA_DIR / "processed" / "quality" / "municipios_dudosos_gimnasios.parquet"
-CLUSTERS = [CLUSTERS_PATH, CLUSTERS_PATH.with_suffix(".parquet")]
 SALIDA = DATA_DIR / "outputs"
 NECESARIAS = ["municipality_code", "municipality_name", "population_18_50",
               "gyms_count", "other_sports_facilities_count"]
@@ -628,10 +633,47 @@ def mostrar(titulo, tabla):
     print(tabla.to_string(index=False))
 
 
+def _leer_parquet(ruta: Path, prefijo_s3: str) -> pd.DataFrame:
+    settings = get_storage_settings()
+    if settings.save_locally and ruta.is_file():
+        return pd.read_parquet(ruta)
+
+    if settings.save_s3:
+        uri = s3_uri_for(ruta.name, prefijo_s3)
+        if uri is None:
+            raise ValueError(
+                f"S3_BUCKET es necesario para leer {ruta.name} desde S3."
+            )
+        bucket, key = parse_s3_uri(uri)
+        client_options = (
+            {"region_name": settings.region_name}
+            if settings.region_name
+            else {}
+        )
+        try:
+            response = boto3.client("s3", **client_options).get_object(
+                Bucket=bucket,
+                Key=key,
+            )
+            with response["Body"] as body:
+                contents = body.read()
+        except (BotoCoreError, ClientError) as error:
+            raise RuntimeError(f"No se pudo leer {uri} desde S3.") from error
+        return pd.read_parquet(io.BytesIO(contents))
+
+    if settings.save_locally:
+        raise FileNotFoundError(
+            f"No se encuentra {ruta}; ejecuta antes 02_calidad y 03_modelo."
+        )
+    raise RuntimeError(
+        "No se puede cargar Gold y clusters: activa SAVE_LOCALLY o SAVE_S3."
+    )
+
+
 def validar_codigos(df: pd.DataFrame, fuente: str) -> None:
     codes = df["municipality_code"].astype("string")
-    if len(codes) != EXPECTED_MUNICIPALITIES:
-        raise ValueError(f"{fuente}: se esperaban {EXPECTED_MUNICIPALITIES} municipios.")
+    if codes.empty:
+        raise ValueError(f"{fuente}: no hay municipios para procesar.")
     if not codes.str.fullmatch(r"\d{5}").fillna(False).all():
         raise ValueError(f"{fuente}: municipality_code debe tener cinco digitos.")
     if codes.duplicated().any():
@@ -640,30 +682,34 @@ def validar_codigos(df: pd.DataFrame, fuente: str) -> None:
 
 
 def cargar_clusters() -> pd.DataFrame:
-    """Lee primero el CSV producido por el modelo y exige cobertura completa."""
-    for ruta in CLUSTERS:
-        if ruta.exists():
-            cl = (pd.read_parquet(ruta) if ruta.suffix == ".parquet"
-                  else pd.read_csv(ruta, dtype={"municipality_code": "string"}))
-            if not {"municipality_code", "cluster"}.issubset(cl.columns):
-                raise ValueError(f"{ruta.name} debe tener las columnas municipality_code y cluster.")
-            validar_codigos(cl, ruta.name)
-            labels = pd.to_numeric(cl["cluster"], errors="raise")
-            if (labels.isna().any() or not np.isfinite(labels.astype(float)).all()
-                    or labels.lt(0).any() or labels.mod(1).ne(0).any()):
-                raise ValueError(f"{ruta.name}: cluster debe ser un entero no negativo.")
-            cl["cluster"] = labels.astype("int64")
-            print(f"Clusters leídos de {ruta.name}: {cl['cluster'].nunique()} grupos")
-            return cl[["municipality_code", "cluster"]]
-    raise FileNotFoundError(
-        f"No se encuentran clusters en {CLUSTERS}. Ejecuta python -m src.modelo.modelo."
+    """Load all cluster assignments produced for municipalities in the model."""
+    clusters = _leer_parquet(CLUSTER_ASSIGNMENTS_PATH, RESULTS_PREFIX)
+    if not {"municipality_code", "cluster"}.issubset(clusters.columns):
+        raise ValueError(
+            f"{CLUSTER_ASSIGNMENTS_PATH.name} debe tener las columnas "
+            "municipality_code y cluster."
+        )
+    validar_codigos(clusters, CLUSTER_ASSIGNMENTS_PATH.name)
+    labels = pd.to_numeric(clusters["cluster"], errors="raise")
+    if (
+        labels.isna().any()
+        or not np.isfinite(labels.astype(float)).all()
+        or labels.lt(0).any()
+        or labels.mod(1).ne(0).any()
+    ):
+        raise ValueError(
+            f"{CLUSTER_ASSIGNMENTS_PATH.name}: cluster debe ser un entero no negativo."
+        )
+    clusters["cluster"] = labels.astype("int64")
+    print(
+        f"Clusters leídos de {CLUSTER_ASSIGNMENTS_PATH.name}: "
+        f"{clusters['cluster'].nunique()} grupos"
     )
+    return clusters[["municipality_code", "cluster"]]
 
 
 def cargar():
-    if not ORO.is_file():
-        raise FileNotFoundError(f"No se encuentra Gold en {ORO}. Ejecuta primero 02_calidad.")
-    df = pd.read_parquet(ORO)
+    df = _leer_parquet(ORO, "gold")
     falta = [c for c in NECESARIAS if c not in df.columns]
     if falta:
         raise ValueError(f"Faltan columnas: {falta}")
@@ -678,11 +724,28 @@ def cargar():
         df[column] = values
     if df["population_18_50"].eq(0).any():
         raise ValueError("Gold: population_18_50 debe ser positiva.")
-    cl = cargar_clusters()
-    if set(df["municipality_code"]) != set(cl["municipality_code"]):
-        raise ValueError("Los clusters deben cubrir exactamente los municipios de Gold.")
-    df = df.merge(cl, on="municipality_code", how="left", validate="one_to_one")
-    print(f"Entrada: {ORO} · {len(df)} municipios · clusters: sí")
+    clusters = cargar_clusters()
+    gold_codes = set(df["municipality_code"])
+    cluster_codes = set(clusters["municipality_code"])
+    absent_from_gold = cluster_codes - gold_codes
+    if absent_from_gold:
+        raise ValueError(
+            "Hay asignaciones de cluster para códigos que no existen en Gold: "
+            + ", ".join(sorted(absent_from_gold))
+        )
+
+    gold_count = len(df)
+    df = df.loc[df["municipality_code"].isin(cluster_codes)].copy()
+    df = df.merge(
+        clusters,
+        on="municipality_code",
+        how="inner",
+        validate="one_to_one",
+    )
+    print(
+        f"Entrada: Gold {gold_count} municipios; "
+        f"{len(df)} incluidos tras filtros del modelo; clusters: sí"
+    )
     return df
 
 

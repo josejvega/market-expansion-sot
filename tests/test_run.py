@@ -12,7 +12,9 @@ class ExecuteNotebooksTests(unittest.TestCase):
         notebook_client_class = MagicMock()
         client = notebook_client_class.return_value
         nbformat = types.ModuleType("nbformat")
-        nbformat.read = MagicMock(side_effect=["ingestion", "processing"])
+        nbformat.read = MagicMock(
+            side_effect=["ingestion", "processing", "model", "business"]
+        )
         nbclient = types.ModuleType("nbclient")
         nbclient.NotebookClient = notebook_client_class
         ipykernel = types.ModuleType("ipykernel")
@@ -31,19 +33,27 @@ class ExecuteNotebooksTests(unittest.TestCase):
         ):
             run.execute_notebooks(timeout=120)
 
-        self.assertEqual(nbformat.read.call_count, 2)
-        first_path = nbformat.read.call_args_list[0].args[0]
-        second_path = nbformat.read.call_args_list[1].args[0]
-        self.assertEqual(first_path.name, "01_ingesta.ipynb")
-        self.assertEqual(second_path.name, "02_calidad.ipynb")
+        self.assertEqual(nbformat.read.call_count, 4)
+        notebook_paths = [
+            call.args[0] for call in nbformat.read.call_args_list
+        ]
+        self.assertEqual(
+            [path.name for path in notebook_paths],
+            [
+                "01_ingesta.ipynb",
+                "02_calidad.ipynb",
+                "03_modelo.ipynb",
+                "04_negocio.ipynb",
+            ],
+        )
         self.assertTrue(
             all(
                 path.parent == run.PROJECT_ROOT / "notebooks"
-                for path in (first_path, second_path)
+                for path in notebook_paths
             )
         )
-        self.assertEqual(notebook_client_class.call_count, 2)
-        self.assertEqual(client.execute.call_count, 2)
+        self.assertEqual(notebook_client_class.call_count, 4)
+        self.assertEqual(client.execute.call_count, 4)
         self.assertEqual(
             notebook_client_class.call_args.kwargs,
             {
