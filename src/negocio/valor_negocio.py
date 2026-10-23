@@ -55,21 +55,47 @@ def competidores_ponderados(df, pesos=PESOS_CENTRAL):
 
 
 def generar_aviso_osm(df):
-    """Marca municipios con cero gimnasios OSM y población objetivo relevante."""
-    out = df.copy()
-    gyms = out.get("gyms_count", out.get("comp_fitness_centre"))
-    if gyms is not None:
-        sin_gimnasios = pd.to_numeric(gyms, errors="raise").fillna(0).eq(0)
-        aviso = sin_gimnasios & pd.to_numeric(
-            out["population_18_50"], errors="raise"
-        ).ge(20_000)
-        out["aviso_calidad"] = np.where(
-            aviso, "Sin gimnasios en OSM: validar con una segunda fuente", ""
-        )
-    else:
-        out["aviso_calidad"] = ""
-    return out
+    """Evalúa la competencia ponderada de TODOS los municipios.
 
+    quality_flag=True significa que el municipio supera el control de calidad:
+    su competencia ponderada observada alcanza al menos el 50 % de la oferta
+    de referencia (1 equivalente de gimnasio por cada 10.000 habitantes 18-50).
+    False significa que la oportunidad debe validarse con una segunda fuente.
+    """
+    out = df.copy()
+    out["reference_gyms_per_10k_18_50"] = 1.0
+    out["expected_gyms"] = (
+        pd.to_numeric(out["population_18_50"], errors="raise") / 10_000
+        * out["reference_gyms_per_10k_18_50"]
+    )
+    out["weighted_observed_vs_expected_pct"] = np.where(
+        out["expected_gyms"].gt(0),
+        pd.to_numeric(out["competidores_pond"], errors="raise")
+        / out["expected_gyms"] * 100,
+        np.nan,
+    )
+    out["quality_flag"] = (
+        out["expected_gyms"].gt(0)
+        & out["weighted_observed_vs_expected_pct"].ge(50)
+    ).astype(bool)
+    out["quality_status"] = np.select(
+        [
+            out["expected_gyms"].isna() | out["expected_gyms"].le(0),
+            out["quality_flag"],
+        ],
+        [
+            "No evaluable: referencia esperada no disponible",
+            "Supera el control de calidad de competencia ponderada",
+        ],
+        default=(
+            "Competencia ponderada inferior al 50% de la referencia: "
+            "validar con una segunda fuente"
+        ),
+    )
+    out["aviso_calidad"] = np.where(
+        out["quality_flag"], "", out["quality_status"]
+    )
+    return out
 
 def candidatos(df):
     """Regla del challenge: menos competencia por habitante objetivo que la media del cluster."""
@@ -168,11 +194,92 @@ def top5_facturacion(df_eval):
     return ordenar_seleccion_economica(viables).head(5)
 
 
-def top5_modelo(df_eval):
-    """Modelo A: candidatos viables, con el mismo desempate que la referencia."""
-    eleg = df_eval[df_eval["candidate_flag"] & df_eval["viable"]]
-    return ordenar_seleccion_economica(eleg).head(5)
+def seleccionar_modelo_con_calidad(df_eval, n=5):
+    """Selecciona candidatos viables que superan calidad y conserva descartados.
 
+    Devuelve: seleccion_final, pendientes_validacion, ranking_completo y
+    tabla_sustituciones. Si uno o varios municipios del ranking económico no
+    superan calidad, entran automáticamente los siguientes válidos.
+    """
+    necesarios = {
+        "candidate_flag", "viable", "quality_flag", "municipality_code",
+        "municipality_name", "facturacion_anual",
+        "facturacion_sin_tope_capacidad", "demanda_por_comp",
+        "population_18_50", "quality_status",
+    }
+    faltantes = sorted(necesarios.difference(df_eval.columns))
+    if faltantes:
+        raise ValueError(
+            "Faltan columnas para la selección con calidad: " + ", ".join(faltantes)
+        )
+
+    candidatos = df_eval.loc[
+        df_eval["candidate_flag"].fillna(False).astype(bool)
+        & df_eval["viable"].fillna(False).astype(bool)
+    ].copy()
+    ranking = ordenar_seleccion_economica(candidatos).reset_index(drop=True)
+    ranking["posicion_ranking_precalidad"] = range(1, len(ranking) + 1)
+
+    validos = ranking.loc[ranking["quality_flag"].fillna(False).astype(bool)].copy()
+    seleccion = validos.head(n).copy()
+    seleccion["posicion"] = range(1, len(seleccion) + 1)
+    seleccion["motivo_calidad"] = (
+        "Seleccionado: candidato viable que supera el control de calidad"
+    )
+
+    ultima_posicion = (
+        int(seleccion["posicion_ranking_precalidad"].max())
+        if not seleccion.empty else 0
+    )
+    dudosos = ~ranking["quality_flag"].fillna(False).astype(bool)
+    sustituidos = ranking.loc[
+        dudosos & ranking["posicion_ranking_precalidad"].le(ultima_posicion)
+    ].copy()
+    sustituidos["motivo_calidad"] = (
+        "Sustituido en el Top 5: no supera el control de calidad"
+    )
+    otros = ranking.loc[
+        dudosos & ranking["posicion_ranking_precalidad"].gt(ultima_posicion)
+    ].copy()
+    otros["motivo_calidad"] = "Oportunidad posterior pendiente de validación"
+    pendientes = pd.concat([sustituidos, otros], ignore_index=True).drop_duplicates(
+        "municipality_code"
+    )
+
+    sustituciones = []
+    reemplazos_disponibles = seleccion.loc[
+        seleccion["posicion_ranking_precalidad"].gt(n)
+    ].copy()
+    for orden, (_, descartado) in enumerate(sustituidos.iterrows()):
+        reemplazo = (
+            reemplazos_disponibles.iloc[orden]
+            if orden < len(reemplazos_disponibles) else None
+        )
+        sustituciones.append({
+            "municipality_code_descartado": descartado["municipality_code"],
+            "municipality_name_descartado": descartado["municipality_name"],
+            "posicion_original": descartado["posicion_ranking_precalidad"],
+            "quality_status_descartado": descartado["quality_status"],
+            "municipality_code_sustituto": (
+                reemplazo["municipality_code"] if reemplazo is not None else pd.NA
+            ),
+            "municipality_name_sustituto": (
+                reemplazo["municipality_name"] if reemplazo is not None else pd.NA
+            ),
+        })
+    tabla_sustituciones = pd.DataFrame(sustituciones)
+    return (
+        seleccion.reset_index(drop=True),
+        pendientes.reset_index(drop=True),
+        ranking.reset_index(drop=True),
+        tabla_sustituciones,
+    )
+
+
+def top5_modelo(df_eval, n=5):
+    """Top final: candidato, viable y con quality_flag=True."""
+    seleccion, _, _, _ = seleccionar_modelo_con_calidad(df_eval, n=n)
+    return seleccion
 
 def top5_diversificado_clusters(df_eval):
     """Selecciona un candidato viable por cluster y permite una sola repetición."""
@@ -182,6 +289,7 @@ def top5_diversificado_clusters(df_eval):
     validos = df_eval.loc[
         df_eval["candidate_flag"].fillna(False).astype(bool)
         & df_eval["viable"].fillna(False).astype(bool)
+        & df_eval["quality_flag"].fillna(False).astype(bool)
     ]
     validos = ordenar_seleccion_economica(validos)
     clusters = sorted(df_eval["cluster"].dropna().unique())
@@ -245,35 +353,43 @@ def comparar(base, modelo):
 
 
 def sensibilidad(df):
-    """Rejilla de escenarios. Devuelve el detalle y cuántas veces sale cada municipio."""
+    """Rejilla de escenarios sin el peso extremo todo_igual."""
     filas, n = [], 0
     niveles = ["bajo", "central", "alto"]
-    for pen, cuota, atr, pesos, regla in product(niveles, niveles, niveles,
-                                                 [k for k in ESCENARIOS_PESOS if pesos_definidos(k)],
-                                                 ["C", "demanda_no_cubierta"]):
+    pesos_sensibilidad = [
+        nombre for nombre in ESCENARIOS_PESOS
+        if nombre != "todo_igual" and pesos_definidos(nombre)
+    ]
+    for pen, cuota, atr, pesos, regla in product(
+        niveles, niveles, niveles, pesos_sensibilidad,
+        ["C", "demanda_no_cubierta"],
+    ):
         n += 1
-        ev = evaluar(df, "central", pesos, regla, con_candidatos=True,
-                     penetracion=pen, cuota_max=cuota, atractivo_nuevo=atr)
+        ev = evaluar(
+            df, "central", pesos, regla, con_candidatos=True,
+            penetracion=pen, cuota_max=cuota, atractivo_nuevo=atr,
+        )
         top = top5_modelo(ev).assign(
-            escenario=f"pen={pen}|cuota={cuota}|atr={atr}|pesos={pesos}|regla={regla}")
+            escenario=f"pen={pen}|cuota={cuota}|atr={atr}|pesos={pesos}|regla={regla}"
+        )
         top["posicion"] = range(1, len(top) + 1)
         top["aviso_calidad"] = top.get("aviso_calidad", "")
-        filas.append(top[["escenario", "posicion", "municipality_code", "municipality_name",
-                          "facturacion_anual", "demanda_por_comp", "aviso_calidad"]])
+        filas.append(top[[
+            "escenario", "posicion", "municipality_code", "municipality_name",
+            "facturacion_anual", "demanda_por_comp", "aviso_calidad",
+        ]])
     detalle = pd.concat(filas, ignore_index=True)
-    freq = (detalle.groupby(["municipality_code", "municipality_name"])
-            .agg(apariciones=("escenario", "count"), posicion_media=("posicion", "mean"),
-                 fact_min=("facturacion_anual", "min"), fact_max=("facturacion_anual", "max"),
-                 aviso_calidad=("aviso_calidad", "first"))
-            .reset_index().sort_values(["apariciones", "posicion_media"], ascending=[False, True]))
-    counts_by_weight = (detalle.assign(
-        pesos=detalle["escenario"].str.extract(r"\|pesos=([^|]+)", expand=False)
-    ).groupby(["municipality_code", "pesos"]).size().unstack(fill_value=0))
-    for peso in ESCENARIOS_PESOS:
-        freq[f"apariciones_{peso}"] = (
-            freq["municipality_code"].map(counts_by_weight[peso])
-            if peso in counts_by_weight else 0
+    freq = (
+        detalle.groupby(["municipality_code", "municipality_name"])
+        .agg(
+            apariciones=("escenario", "count"),
+            posicion_media=("posicion", "mean"),
+            fact_min=("facturacion_anual", "min"),
+            fact_max=("facturacion_anual", "max"),
         )
+        .reset_index()
+        .sort_values(["apariciones", "posicion_media"], ascending=[False, True])
+    )
     freq["combinaciones_totales"] = n
     freq["robustez"] = freq["apariciones"].astype(str) + f" de {n}"
     return detalle, freq
