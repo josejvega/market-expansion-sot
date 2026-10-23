@@ -100,10 +100,15 @@ no como copia mantenida a mano.
 La app usa los mismos cálculos y supuestos de `src/negocio/valor_negocio.py`.
 La interfaz portable2 incluye campos que Gold no tiene. Las coordenadas se
 calculan a partir de los polígonos municipales Silver; el punto representativo
-solo localiza el municipio, no una ubicación de gimnasio. Gold no incluye un
-score de recomendación: la columna se muestra como no disponible, en vez de
-inventar una puntuación. Los datos turísticos, secciones censales, auditorías
+solo localiza el municipio, no una ubicación de gimnasio. Gold y el modelo no
+publican un score de recomendación, así que la tabla de selección no muestra
+una puntuación inventada. Los datos turísticos, secciones censales, auditorías
 e intervalos de ingresos tampoco están disponibles. La facturación y
-viabilidad son escenarios, no ventas observadas ni predicciones. Los recuentos
-de competencia proceden de OpenStreetMap y no permiten concluir que un
-municipio carezca realmente de competidores.
+viabilidad son escenarios, no ventas observadas ni predicciones. El modelo no
+publica un score de recomendación; la posición de la tabla refleja el orden de
+selección económica y el simulador calcula una puntuación independiente con
+los pesos elegidos por el usuario. El punto de equilibrio usa los costes fijos,
+cuota anual y capacidad del escenario central; como no hay porcentaje de costes
+variables documentado, debe introducirse antes de obtener el cálculo. Los
+recuentos de competencia proceden de OpenStreetMap y no permiten concluir que
+un municipio carezca realmente de competidores.

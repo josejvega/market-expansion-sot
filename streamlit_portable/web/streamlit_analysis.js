@@ -18,7 +18,7 @@ const marketAnalysis = {
             const target = (profile ? profile.populations[row.id] : row.target_population) * settings.multiplier;
             const members = row.competitor_count == null ? null : target * settings.penetration / (row.competitor_count + 1);
             return {...row, scenarioTarget: target, scenarioMembers: members, scenarioRevenue: members == null ? null : members * settings.ticket,
-                criteria: {demand: target, income: row.income_eur, growth: row.growth_pct, opportunity: row.score}};
+                criteria: {demand: target, income: row.income_eur, growth: row.growth_pct}};
         });
         const usable = rows.filter(row => row.scenarioTarget > 0 && Object.entries(weights).every(([key, weight]) => weight === 0 || row.criteria[key] != null));
         const ranges = {};
@@ -61,13 +61,34 @@ if (typeof document !== 'undefined') {
     setValue('variable-cost', finance.variable_cost_ratio == null ? null : finance.variable_cost_ratio * 100);
     setValue('finance-ticket', finance.annual_ticket_eur);
     setValue('capacity', finance.capacity_members);
+    el('finance-data-note').textContent = [
+        `Referencias del escenario central: costes fijos ${money(finance.annual_fixed_cost_eur)}, cuota anual ${money(finance.annual_ticket_eur)} y capacidad ${fmt(finance.capacity_members)} abonados.`,
+        finance.variable_cost_ratio == null
+            ? 'El proyecto no aporta un porcentaje de costes variables; introdúcelo para calcular el punto de equilibrio. No se asume que sea 0%.'
+            : 'El porcentaje de costes variables se ha cargado desde los supuestos del escenario.'
+    ].join(' ');
     function updateFinance() {
         const fixed = readNumber('fixed-cost'), variable = readNumber('variable-cost');
-        const result = marketAnalysis.breakEven(fixed, variable == null ? null : variable / 100, readNumber('finance-ticket'), readNumber('capacity'));
+        const ticket = readNumber('finance-ticket'), capacity = readNumber('capacity');
+        const result = marketAnalysis.breakEven(fixed, variable == null ? null : variable / 100, ticket, capacity);
         el('breakeven-revenue').textContent = result ? money(result.revenue) : 'n/d';
         el('breakeven-members').textContent = result ? fmt(result.members) : 'n/d';
-        el('profitability-answer').textContent = result ? `El umbral operativo es ${money(result.revenue)} al ano, con ${money(fixed)} de costes fijos y ${fmt(variable, 1)} % de costes variables sobre ventas. ` + (result.members == null ? 'Sin cuota anual no se calcula el numero de abonados.' : `Equivale a ${fmt(result.members)} abonados a la cuota indicada.`) : 'No se puede determinar sin costes fijos anuales y porcentaje de costes variables. El margen de contribucion debe ser positivo.';
-        el('capacity-note').textContent = result?.capacityExceeded ? 'El punto de equilibrio supera la capacidad indicada.' : 'Umbral operativo: no incluye inversion inicial, impuestos ni costes no incorporados a los parametros.';
+        let explanation;
+        if (fixed == null || variable == null) {
+            explanation = 'Introduce los costes fijos anuales y el porcentaje de costes variables sobre ventas. Sin este último dato no se puede calcular la facturación mínima.';
+        } else if (variable < 0 || variable >= 100) {
+            explanation = 'El porcentaje de costes variables debe ser mayor o igual que 0% y menor que 100%.';
+        } else if (result == null) {
+            explanation = 'Revisa los valores introducidos: los costes fijos deben ser no negativos.';
+        } else {
+            explanation = `Con ${money(fixed)} de costes fijos y ${fmt(variable, 1)} % de costes variables, la facturación mínima estimada es ${money(result.revenue)} al año. `;
+            explanation += ticket == null || ticket <= 0
+                ? 'Introduce una cuota anual positiva para estimar los abonados necesarios.'
+                : `Equivale a ${fmt(result.members)} abonados a la cuota indicada.`;
+        }
+        el('profitability-answer').textContent = explanation;
+        el('profitability-answer-faq').textContent = explanation;
+        el('capacity-note').textContent = result?.capacityExceeded ? 'El punto de equilibrio supera la capacidad indicada.' : 'Umbral operativo: no incluye inversión inicial, impuestos ni costes no incorporados a los parámetros.';
     }
     for (const id of ['fixed-cost', 'variable-cost', 'finance-ticket', 'capacity']) el(id).addEventListener('input', updateFinance);
     updateFinance();
@@ -80,11 +101,11 @@ if (typeof document !== 'undefined') {
         for (const profile of simulation.target_profiles || []) {const option = document.createElement('option');option.value = profile.id;option.textContent = profile.label;el('target-profile').append(option);}
         function resetSimulation() {
             setValue('target-profile', 'current');setValue('target-scale', 100);setValue('penetration', simulation.penetration * 100);setValue('scenario-ticket', simulation.annual_ticket_eur);
-            for (const key of ['demand', 'income', 'growth', 'opportunity']) {el('weight-' + key).max = Math.max(100, simulation.weights[key]);el('weight-' + key).step = 'any';setValue('weight-' + key, simulation.weights[key]);}
+            for (const key of ['demand', 'income', 'growth']) {el('weight-' + key).max = Math.max(100, simulation.weights[key]);el('weight-' + key).step = 'any';setValue('weight-' + key, simulation.weights[key]);}
             updateSimulation();
         }
         function updateSimulation() {
-            const weights = Object.fromEntries(['demand', 'income', 'growth', 'opportunity'].map(key => [key, readNumber('weight-' + key)]));
+            const weights = Object.fromEntries(['demand', 'income', 'growth'].map(key => [key, readNumber('weight-' + key)]));
             el('target-scale-value').textContent = fmt(readNumber('target-scale')) + ' %';
             for (const [key, value] of Object.entries(weights)) el('weight-' + key + '-value').textContent = fmt(value, 2);
             const result = marketAnalysis.simulate(DATA, {profile: el('target-profile').value, multiplier: readNumber('target-scale') / 100, penetration: readNumber('penetration') == null ? NaN : readNumber('penetration') / 100, ticket: readNumber('scenario-ticket') ?? NaN, weights});
