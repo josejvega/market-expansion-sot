@@ -61,6 +61,28 @@ def candidate_data() -> pd.DataFrame:
     )
 
 
+def cluster_data() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "municipality_code": ["04001", "04002"],
+            "cluster": [2, 1],
+        }
+    )
+
+
+def missing_s3_key() -> ClientError:
+    return ClientError(
+        {
+            "Error": {
+                "Code": "NoSuchKey",
+                "Message": "The specified key does not exist.",
+            },
+            "ResponseMetadata": {"HTTPStatusCode": 404},
+        },
+        "GetObject",
+    )
+
+
 def competitor_data() -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(
         {
@@ -133,6 +155,20 @@ class MunicipalityDataTests(unittest.TestCase):
         self.assertTrue(has_candidates)
         self.assertEqual(result["candidate_flag"].tolist(), [True, False])
         self.assertEqual(result["cluster"].tolist(), [2, pd.NA])
+
+    def test_joins_complete_cluster_assignments_and_candidates(self) -> None:
+        municipalities, _ = prepare_municipality_data(gold_data())
+
+        result, has_candidates = prepare_model_candidates(
+            municipalities,
+            candidate_data(),
+            cluster_data(),
+        )
+
+        self.assertTrue(has_candidates)
+        self.assertEqual(result["candidate_flag"].tolist(), [True, False])
+        self.assertEqual(result["cluster"].tolist(), [2, 1])
+        self.assertTrue(result["cluster_assignments_published"].all())
 
     def test_rejects_candidate_codes_missing_from_gold(self) -> None:
         municipalities, _ = prepare_municipality_data(gold_data())
@@ -222,11 +258,13 @@ class MunicipalityDataTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             gold_path = Path(directory) / "gold.parquet"
             candidates_path = Path(directory) / "municipios_candidatos.parquet"
+            clusters_path = Path(directory) / "municipios_clusters.parquet"
             boundaries_path = Path(directory) / "boundaries.parquet"
             competitors_path = Path(directory) / "gyms_with_municipality.parquet"
             gold_data().to_parquet(gold_path, index=False)
             boundary_data().to_parquet(boundaries_path, index=False)
             candidate_data().to_parquet(candidates_path, index=False)
+            cluster_data().to_parquet(clusters_path, index=False)
             competitor_data().to_parquet(competitors_path, index=False)
 
             with patch(
@@ -237,13 +275,15 @@ class MunicipalityDataTests(unittest.TestCase):
                     gold_path,
                     boundaries_path=boundaries_path,
                     candidates_path=candidates_path,
+                    clusters_path=clusters_path,
                     competitor_points_path=competitors_path,
                 )
 
         self.assertTrue(has_candidates)
         self.assertEqual(result["candidate_flag"].tolist(), [True, False])
         self.assertEqual(result.loc[0, "cluster"], 2)
-        self.assertTrue(pd.isna(result.loc[1, "cluster"]))
+        self.assertEqual(result.loc[1, "cluster"], 1)
+        self.assertTrue(result["cluster_assignments_published"].all())
         self.assertEqual(source, "Local · gold.parquet")
         self.assertIn("lat", result.columns)
         self.assertEqual(len(competitors), 1)
@@ -284,6 +324,7 @@ class MunicipalityDataTests(unittest.TestCase):
             {"Body": gold_parquet},
             {"Body": boundaries_parquet},
             {"Body": competitors_parquet},
+            missing_s3_key(),
         ]
 
         with (
@@ -312,6 +353,7 @@ class MunicipalityDataTests(unittest.TestCase):
                 "gold/missing-gold.parquet",
                 "processed/silver/limites_municipales_andalucia.parquet",
                 "processed/silver/gyms_with_municipality_andalusia.parquet",
+                "results/municipios_clusters.parquet",
             ],
         )
 
@@ -324,16 +366,23 @@ class MunicipalityDataTests(unittest.TestCase):
         competitor_data().to_parquet(competitors_parquet, index=False)
         candidates_parquet = io.BytesIO()
         candidate_data().to_parquet(candidates_parquet, index=False)
-        gold_parquet.seek(0)
-        boundaries_parquet.seek(0)
-        competitors_parquet.seek(0)
-        candidates_parquet.seek(0)
+        clusters_parquet = io.BytesIO()
+        cluster_data().to_parquet(clusters_parquet, index=False)
+        for buffer in (
+            gold_parquet,
+            boundaries_parquet,
+            competitors_parquet,
+            candidates_parquet,
+            clusters_parquet,
+        ):
+            buffer.seek(0)
         s3_client = unittest.mock.MagicMock()
         s3_client.get_object.side_effect = [
             {"Body": gold_parquet},
             {"Body": boundaries_parquet},
             {"Body": competitors_parquet},
             {"Body": candidates_parquet},
+            {"Body": clusters_parquet},
         ]
 
         with (
@@ -352,8 +401,8 @@ class MunicipalityDataTests(unittest.TestCase):
 
         self.assertTrue(has_candidates)
         self.assertEqual(result["candidate_flag"].tolist(), [True, False])
-        self.assertEqual(result.loc[0, "cluster"], 2)
-        self.assertTrue(pd.isna(result.loc[1, "cluster"]))
+        self.assertEqual(result["cluster"].tolist(), [2, 1])
+        self.assertTrue(result["cluster_assignments_published"].all())
         self.assertEqual(len(competitors), 1)
         self.assertEqual(
             [call.kwargs["Key"] for call in s3_client.get_object.call_args_list],
@@ -362,6 +411,7 @@ class MunicipalityDataTests(unittest.TestCase):
                 "processed/silver/limites_municipales_andalucia.parquet",
                 "processed/silver/gyms_with_municipality_andalusia.parquet",
                 "results/municipios_candidatos.parquet",
+                "results/municipios_clusters.parquet",
             ],
         )
 
@@ -380,16 +430,8 @@ class MunicipalityDataTests(unittest.TestCase):
             {"Body": gold_parquet},
             {"Body": boundaries_parquet},
             {"Body": competitors_parquet},
-            ClientError(
-                {
-                    "Error": {
-                        "Code": "NoSuchKey",
-                        "Message": "The specified key does not exist.",
-                    },
-                    "ResponseMetadata": {"HTTPStatusCode": 404},
-                },
-                "GetObject",
-            ),
+            missing_s3_key(),
+            missing_s3_key(),
         ]
 
         with (

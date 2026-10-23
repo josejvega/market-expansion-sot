@@ -99,8 +99,12 @@ class Portable2DashboardTests(unittest.TestCase):
         self.assertIn("falta el artefacto", study["metadata"]["selection_description"])
         self.assertEqual(
             study["metadata"]["missing_artifacts"],
-            ["results/municipios_candidatos.parquet"],
+            [
+                "results/municipios_candidatos.parquet",
+                "results/municipios_clusters.parquet",
+            ],
         )
+        self.assertFalse(study["metadata"]["cluster_assignments_published"])
         first = study["municipalities"][0]
         self.assertAlmostEqual(first["lat"], 36.05)
         self.assertAlmostEqual(first["lon"], -1.95)
@@ -124,6 +128,7 @@ class Portable2DashboardTests(unittest.TestCase):
         municipalities = self.municipalities.assign(
             cluster=pd.Series([0, 0, pd.NA, 1, pd.NA, pd.NA], dtype="Int64"),
             candidate_flag=[True, True, False, True, False, False],
+            cluster_assignments_published=True,
         )
 
         study = build_study(
@@ -134,6 +139,7 @@ class Portable2DashboardTests(unittest.TestCase):
 
         self.assertEqual(validate_study(study), study)
         self.assertEqual(study["metadata"]["missing_artifacts"], [])
+        self.assertTrue(study["metadata"]["cluster_assignments_published"])
         self.assertNotIn('class="data-warning"', render_study(study))
         candidates = [
             row for row in study["municipalities"] if row["candidate"]
@@ -147,10 +153,10 @@ class Portable2DashboardTests(unittest.TestCase):
             [
                 "0",
                 "0",
-                "Asignación no publicada",
+                "Fuera del clustering",
                 "1",
-                "Asignación no publicada",
-                "Asignación no publicada",
+                "Fuera del clustering",
+                "Fuera del clustering",
             ],
         )
         self.assertTrue(
@@ -172,6 +178,10 @@ class Portable2DashboardTests(unittest.TestCase):
         self.assertIn("Simulador de escenarios", html)
         self.assertIn("Secciones censales y areas de influencia", html)
         self.assertIn("marketAnalysis.simulate", html)
+        self.assertIn("Oferta registrada en cada grupo", html)
+        self.assertIn("No se muestran medias todavía", html)
+        self.assertIn("Los números de grupo son etiquetas, no una clasificación de mejor a peor.", html)
+        self.assertIn("candidatos por sí solos no representan todos los municipios de cada grupo", html)
         self.assertRegex(html, r"<style>\s*:root\{--ink:")
         self.assertIn("--accent:#a100ff", html)
         self.assertNotIn("\ufeff", html)
@@ -180,7 +190,8 @@ class Portable2DashboardTests(unittest.TestCase):
         self.assertNotIn("__DATA__", html)
         self.assertIn('class="data-warning" role="status"', html)
         self.assertIn("results/municipios_candidatos.parquet", html)
-        self.assertIn("El resto del dashboard se carga", html)
+        self.assertIn("asignación de grupos y/o las recomendaciones pueden estar incompletas", html)
+        self.assertIn("results/municipios_clusters.parquet", html)
         self.assertLess(html.index('class="data-warning"'), html.index("<header>"))
         self.assertNotIn("__MARKET__", html)
         self.assertNotIn("__ANALYSIS__", html)
@@ -188,7 +199,7 @@ class Portable2DashboardTests(unittest.TestCase):
     def test_static_assets_match_integrated_portable2_files(self) -> None:
         web_dir = Path(__file__).resolve().parent / "web"
         expected_hashes = {
-            "streamlit.html": "4292548b23273e53ab68038e81856b81140b112ce1f29d02edec089082dd9865",
+            "streamlit.html": "3e70cca652d8e8bd1fb645a68fc0092fe9faa46c06591835bcaa3629d8f10f92",
             "streamlit.css": "7cac206662c387b06a3134db7de68f98ffef33e9adb43d7ecec24e2e2328b638",
             "streamlit_analysis.js": "df7e560b61b16f0d4a40264162d941cfaf7111782d40efcdb3d80fdffb5fb13e",
         }

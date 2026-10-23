@@ -20,6 +20,8 @@ from src.procesado.common.paths import (
 
 MODEL_CANDIDATES_FILENAME = "municipios_candidatos.parquet"
 MODEL_CANDIDATES_S3_KEY = f"results/{MODEL_CANDIDATES_FILENAME}"
+MODEL_CLUSTERS_FILENAME = "municipios_clusters.parquet"
+MODEL_CLUSTERS_S3_KEY = f"results/{MODEL_CLUSTERS_FILENAME}"
 COMPETITOR_COLUMNS = {
     "osm_type",
     "osm_id",
@@ -141,16 +143,62 @@ def prepare_municipality_data(
 def prepare_model_candidates(
     municipalities: pd.DataFrame,
     candidates: pd.DataFrame | None,
+    clusters: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, bool]:
-    """Join the model's candidate-only Parquet without requiring every cluster."""
+    """Join cluster assignments and the model's candidate-only Parquet."""
     prepared = municipalities.copy()
-    if candidates is None:
-        prepared["candidate_flag"] = False
-        prepared["cluster"] = pd.Series(
-            pd.NA,
-            index=prepared.index,
-            dtype="Int64",
+    municipality_codes = prepared["municipality_code"].astype("string")
+    prepared["cluster"] = pd.Series(pd.NA, index=prepared.index, dtype="Int64")
+    prepared["cluster_assignments_published"] = clusters is not None
+    prepared["candidate_flag"] = False
+
+    if clusters is not None:
+        missing = sorted(
+            {"municipality_code", "cluster"}.difference(clusters.columns)
         )
+        if missing:
+            raise ValueError(
+                f"Clusters del modelo: faltan columnas requeridas: {missing}"
+            )
+        cluster_data = clusters.loc[:, ["municipality_code", "cluster"]].copy()
+        cluster_data["municipality_code"] = (
+            cluster_data["municipality_code"].astype("string").str.strip()
+        )
+        cluster_codes = cluster_data["municipality_code"]
+        if (
+            cluster_codes.isna().any()
+            or not cluster_codes.str.fullmatch(r"\d{5}").fillna(False).all()
+        ):
+            raise ValueError(
+                "Clusters del modelo: municipality_code debe tener cinco dígitos."
+            )
+        if cluster_codes.duplicated().any():
+            raise ValueError(
+                "Clusters del modelo: municipality_code debe ser único."
+            )
+        labels = pd.to_numeric(cluster_data["cluster"], errors="raise")
+        if (
+            labels.isna().any()
+            or not labels.dropna().map(math.isfinite).all()
+            or labels.lt(0).any()
+            or labels.mod(1).ne(0).any()
+        ):
+            raise ValueError(
+                "Clusters del modelo: cluster debe ser un entero no negativo."
+            )
+        cluster_data["cluster"] = labels.astype("int64")
+
+        unknown_codes = sorted(set(cluster_codes).difference(municipality_codes))
+        if unknown_codes:
+            raise ValueError(
+                "Clusters del modelo contiene municipios ausentes de Gold: "
+                f"{unknown_codes[:10]}."
+            )
+        cluster_by_code = cluster_data.set_index("municipality_code")["cluster"]
+        assigned = municipality_codes.map(cluster_by_code)
+        prepared["cluster"] = assigned.astype("Int64")
+
+    if candidates is None:
         return prepared, False
 
     missing = sorted({"municipality_code", "cluster"}.difference(candidates.columns))
@@ -184,7 +232,6 @@ def prepare_model_candidates(
         )
     model["cluster"] = labels.astype("int64")
 
-    municipality_codes = prepared["municipality_code"].astype("string")
     unknown_codes = sorted(set(model_codes).difference(municipality_codes))
     if unknown_codes:
         raise ValueError(
@@ -192,18 +239,20 @@ def prepare_model_candidates(
             f"{unknown_codes[:10]}."
         )
 
-    model["candidate_flag"] = True
-    joined = prepared.merge(
-        model,
-        on="municipality_code",
-        how="left",
-        validate="one_to_one",
+    cluster_by_code = model.set_index("municipality_code")["cluster"]
+    candidate_clusters = municipality_codes.map(cluster_by_code)
+    conflicts = (
+        prepared["cluster"].notna()
+        & candidate_clusters.notna()
+        & prepared["cluster"].ne(candidate_clusters)
     )
-    joined["candidate_flag"] = (
-        joined["candidate_flag"].astype("boolean").fillna(False).astype(bool)
-    )
-    joined["cluster"] = joined["cluster"].astype("Int64")
-    return joined, True
+    if conflicts.any():
+        raise ValueError(
+            "Candidatos del modelo contiene clusters distintos de las asignaciones."
+        )
+    prepared["cluster"] = prepared["cluster"].fillna(candidate_clusters).astype("Int64")
+    prepared["candidate_flag"] = municipality_codes.isin(model_codes)
+    return prepared, True
 
 
 def prepare_competitor_records(points: gpd.GeoDataFrame) -> list[dict[str, object]]:
@@ -306,6 +355,8 @@ def load_municipality_data(
     boundaries_path: Path | None = None,
     candidates_s3_key: str | None = MODEL_CANDIDATES_S3_KEY,
     competitor_points_path: Path | None = None,
+    clusters_path: Path | None = None,
+    clusters_s3_key: str | None = MODEL_CLUSTERS_S3_KEY,
 ) -> tuple[pd.DataFrame, bool, str, list[dict[str, object]]]:
     """Read the repository's Gold, Silver, and model candidate artifacts."""
     gold_path = Path(gold_path)
@@ -314,6 +365,10 @@ def load_municipality_data(
     )
     competitor_points_path = Path(
         competitor_points_path or GYMS_WITH_MUNICIPALITY_SILVER_PATH
+    )
+    clusters_path = Path(
+        clusters_path
+        or gold_path.parent.parent.parent / "results" / MODEL_CLUSTERS_FILENAME
     )
     settings = get_storage_settings()
     if settings.bucket_name:
@@ -411,6 +466,28 @@ def load_municipality_data(
                         )
                     ) from error
 
+        clusters = None
+        if clusters_s3_key:
+            try:
+                clusters_response = client.get_object(
+                    Bucket=settings.bucket_name,
+                    Key=clusters_s3_key,
+                )
+                with clusters_response["Body"] as body:
+                    clusters = pd.read_parquet(BytesIO(body.read()))
+            except (BotoCoreError, ClientError) as error:
+                error_code = getattr(error, "response", {}).get(
+                    "Error", {}
+                ).get("Code")
+                if error_code not in {"NoSuchKey", "404"}:
+                    raise RuntimeError(
+                        _s3_read_error_message(
+                            settings.bucket_name,
+                            clusters_s3_key,
+                            error,
+                        )
+                    ) from error
+
         source = f"S3 · {gold_key}"
     else:
         if not gold_path.is_file():
@@ -434,11 +511,17 @@ def load_municipality_data(
         candidates = None
         if candidates_path is not None and Path(candidates_path).is_file():
             candidates = pd.read_parquet(candidates_path)
+        clusters = (
+            pd.read_parquet(clusters_path)
+            if clusters_path.is_file()
+            else None
+        )
 
     municipalities, _ = prepare_municipality_data(gold)
     municipalities, has_candidates = prepare_model_candidates(
         municipalities,
         candidates,
+        clusters,
     )
     municipalities = add_municipality_coordinates(municipalities, boundaries)
     competitors = (

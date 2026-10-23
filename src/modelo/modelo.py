@@ -22,6 +22,7 @@ from src.procesado.common.paths import DATA_DIR
 RESULTS_DIR = DATA_DIR / "results"
 RESULTS_PREFIX = "results"
 MUNICIPALITY_CANDIDATES_FILENAME = "municipios_candidatos.parquet"
+MUNICIPALITY_CLUSTERS_FILENAME = "municipios_clusters.parquet"
 
 
 def obtener_inercias(k_values: Iterable[int], X_escalado: np.ndarray) -> list[float]:
@@ -190,29 +191,42 @@ def seleccionar_y_guardar_municipios_candidatos(
     municipios: pd.DataFrame,
     etiquetas_cluster: pd.Series | np.ndarray | list[int],
 ) -> pd.DataFrame:
-    """Select below-average municipalities and persist results locally and/or to S3."""
+    """Select candidates and persist candidate and complete cluster outputs."""
     candidatos = seleccionar_municipios_bajo_media_cluster(
         municipios,
         etiquetas_cluster,
     )
     settings = get_storage_settings()
+    should_persist = settings.save_locally or settings.save_s3
+    if should_persist and "municipality_code" not in municipios.columns:
+        raise ValueError(
+            "municipality_code es necesario para guardar las asignaciones de cluster."
+        )
+    etiquetas = pd.Series(etiquetas_cluster).reset_index(drop=True)
+    asignaciones = pd.DataFrame()
+    if should_persist:
+        asignaciones = municipios.loc[:, ["municipality_code"]].reset_index(drop=True)
+        asignaciones["cluster"] = etiquetas.to_numpy()
 
-    def persist(output_path: Path) -> None:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        candidatos.to_parquet(output_path, index=False, compression="snappy")
+    def persist(output_dir: Path) -> None:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        candidates_path = output_dir / MUNICIPALITY_CANDIDATES_FILENAME
+        clusters_path = output_dir / MUNICIPALITY_CLUSTERS_FILENAME
+        candidatos.to_parquet(candidates_path, index=False, compression="snappy")
+        asignaciones.to_parquet(clusters_path, index=False, compression="snappy")
         if settings.save_s3:
             upload_files_to_s3(
-                [output_path],
+                [candidates_path, clusters_path],
                 prefix=RESULTS_PREFIX,
                 bucket_name=settings.bucket_name,
                 region_name=settings.region_name,
             )
 
     if settings.save_locally:
-        persist(RESULTS_DIR / MUNICIPALITY_CANDIDATES_FILENAME)
+        persist(RESULTS_DIR)
     elif settings.save_s3:
         with TemporaryDirectory(prefix="market-expansion-results-") as directory:
-            persist(Path(directory) / MUNICIPALITY_CANDIDATES_FILENAME)
+            persist(Path(directory))
 
     return candidatos
 

@@ -12,20 +12,27 @@ se leen de S3 y la app falla con un error claro si no hay acceso, sin usar una
 copia local que pueda estar desactualizada. Si `S3_BUCKET` no está configurado,
 se leen las copias locales. No hace falta crear ni mantener un JSON intermedio.
 
-La app no entrena modelos ni requiere scikit-learn. Lee el artefacto de
-candidatos que produce el modelo, `results/municipios_candidatos.parquet`,
-con las columnas `municipality_code` y `cluster`. Este archivo solo contiene
-municipios candidatos, no la asignación de cluster completa. Los municipios
-que no aparecen se muestran con la asignación como no publicada. En S3 la clave
-por defecto es `results/municipios_candidatos.parquet`; puede cambiarse con
-`GYM_CANDIDATES_S3_KEY`. En modo local, el archivo por defecto es
-`data/results/municipios_candidatos.parquet` y puede cambiarse con
-`GYM_CANDIDATES_PATH`. Si el artefacto aún no existe en S3, el resto del
-dashboard carga sin recomendaciones del modelo y lo indica explícitamente; no
-se inventan candidatos. Se muestra un aviso destacado en la parte superior
-con la clave que falta. Los errores de permisos u otros fallos de S3 siguen
-mostrándose como errores. Para desactivar la lectura del artefacto, deja
-`GYM_CANDIDATES_S3_KEY` vacío. El modelo se ejecuta fuera de Streamlit.
+La app no entrena modelos ni requiere scikit-learn. Lee dos artefactos del
+modelo: `results/municipios_candidatos.parquet` contiene solo los municipios
+candidatos y `results/municipios_clusters.parquet` contiene las asignaciones
+de todos los municipios que pudieron entrar en el clustering. Los municipios
+sin variables completas para entrenar se muestran como "Fuera del clustering";
+si falta el segundo artefacto, se avisa de que la asignación aún no está
+publicada. En S3 las claves por defecto son esas rutas bajo `results/`. En modo
+local, los archivos por defecto están en `data/results/`. Si falta cualquiera
+de los artefactos, el dashboard muestra lo disponible y avisa; no inventa
+candidatos ni clusters. Los errores de permisos u otros fallos de S3 siguen
+mostrándose como errores. `GYM_CANDIDATES_S3_KEY` puede cambiar la clave de
+candidatos o desactivar su lectura si queda vacío. El modelo se ejecuta fuera
+de Streamlit.
+
+La sección "Oferta registrada en cada grupo" solo muestra medias cuando está
+disponible la asignación completa de clusters; el archivo de candidatos por sí
+solo no basta para calcular medias representativas. La tasa mostrada es la
+media municipal de gimnasios más otras instalaciones deportivas registradas
+por cada 10.000 residentes de 18–50 años, contando cada instalación igual.
+Los números de cluster son etiquetas sin orden y la tasa no demuestra que un
+municipio esté libre de competencia.
 
 La capa Silver
 `processed/silver/gyms_with_municipality_andalusia.parquet` aporta los puntos
@@ -54,12 +61,11 @@ python -m streamlit run streamlit_portable/streamlit_app.py
 En EC2 no guardes claves AWS en `.env`: asocia a la instancia un IAM role
 (instance profile). boto3 obtendrá credenciales temporales de ese rol.
 
-Para generar y publicar el artefacto de candidatos, ejecuta
+Para generar y publicar los artefactos del modelo, ejecuta
 `notebooks/03_modelo.ipynb` interactivamente después de generar Gold. Revisa
 los gráficos de inercia y silhouette, elige `N_CLUSTERS` y ejecuta desde la
 celda de entrenamiento hasta la última. Con `SAVE_S3=true`, esa última celda
-sube `data/results/municipios_candidatos.parquet` a
-`results/municipios_candidatos.parquet` en el bucket configurado. El módulo
+sube ambos Parquet a `results/` en el bucket configurado. El módulo
 `src.modelo.modelo` contiene funciones de entrenamiento y persistencia, pero
 no se ejecuta como comando independiente.
 
@@ -74,7 +80,8 @@ IAM con permiso `s3:GetObject` sobre los objetos Gold, Silver y el modelo:
 `arn:aws:s3:::<S3_BUCKET>/gold/tabla_oro_municipios_andalucia.parquet` y
 `arn:aws:s3:::<S3_BUCKET>/processed/silver/limites_municipales_andalucia.parquet`,
 `arn:aws:s3:::<S3_BUCKET>/processed/silver/gyms_with_municipality_andalusia.parquet`
-y `arn:aws:s3:::<S3_BUCKET>/results/municipios_candidatos.parquet`.
+y `arn:aws:s3:::<S3_BUCKET>/results/municipios_candidatos.parquet` y
+`arn:aws:s3:::<S3_BUCKET>/results/municipios_clusters.parquet`.
 Configura `S3_BUCKET` y `AWS_DEFAULT_REGION` en el `.env`. boto3 obtendrá las
 credenciales temporales del rol automáticamente: no copies claves AWS a la
 instancia ni al repositorio. Arranca Streamlit en la interfaz de red de la

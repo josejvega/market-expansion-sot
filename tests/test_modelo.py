@@ -1,4 +1,7 @@
 import unittest
+from tempfile import TemporaryDirectory
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import matplotlib
@@ -14,6 +17,7 @@ from src.modelo.modelo import (
     obtener_inercias,
     obtener_silhouette_scores,
     seleccionar_municipios_bajo_media_cluster,
+    seleccionar_y_guardar_municipios_candidatos,
 )
 from src.modelo.prepara_variables_modelo import seleccionar_variables_modelo
 
@@ -165,6 +169,47 @@ class KMeansModelTests(unittest.TestCase):
             seleccionar_municipios_bajo_media_cluster(municipalities, [0])
         with self.assertRaisesRegex(ValueError, "no pueden contener"):
             seleccionar_municipios_bajo_media_cluster(municipalities, [0, None])
+
+    def test_persists_candidates_and_all_cluster_assignments(self):
+        municipalities = pd.DataFrame(
+            {
+                "municipality_code": ["00001", "00002", "00003", "00004"],
+                "population_total": [100_000] * 4,
+                "gyms_count": [2, 10, 5, 5],
+                "other_sports_facilities_count": [0, 0, 0, 0],
+            }
+        )
+
+        with TemporaryDirectory() as directory:
+            results_dir = Path(directory) / "results"
+            settings = SimpleNamespace(save_locally=True, save_s3=False)
+            with (
+                patch("src.modelo.modelo.RESULTS_DIR", results_dir),
+                patch("src.modelo.modelo.get_storage_settings", return_value=settings),
+            ):
+                candidates = seleccionar_y_guardar_municipios_candidatos(
+                    municipalities,
+                    [0, 0, 1, 1],
+                )
+
+            assignments = pd.read_parquet(
+                results_dir / "municipios_clusters.parquet"
+            )
+            saved_candidates = pd.read_parquet(
+                results_dir / "municipios_candidatos.parquet"
+            )
+
+        self.assertEqual(candidates["municipality_code"].tolist(), ["00001"])
+        self.assertEqual(saved_candidates["municipality_code"].tolist(), ["00001"])
+        self.assertEqual(
+            assignments.to_dict(orient="records"),
+            [
+                {"municipality_code": "00001", "cluster": 0},
+                {"municipality_code": "00002", "cluster": 0},
+                {"municipality_code": "00003", "cluster": 1},
+                {"municipality_code": "00004", "cluster": 1},
+            ],
+        )
 
     def test_variable_selection_applies_log1p_to_population(self):
         municipalities = pd.DataFrame(

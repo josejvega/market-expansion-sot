@@ -29,6 +29,7 @@ from src.procesado.common.paths import GOLD_TABLE_PATH  # noqa: E402
 from streamlit_data import (  # noqa: E402
     MODEL_CANDIDATES_FILENAME,
     MODEL_CANDIDATES_S3_KEY,
+    MODEL_CLUSTERS_S3_KEY,
     load_municipality_data,
 )
 
@@ -62,11 +63,18 @@ def build_study(
         if has_model_candidates
         else analysis.iloc[0:0]
     )
+    clusters_published = bool(
+        municipalities.get(
+            "cluster_assignments_published",
+            pd.Series(False, index=municipalities.index),
+        ).any()
+    )
     params = parametros(scenario)
     metadata = {
         "title": "Expansión de mercado · Andalucía",
         "region": "Andalucía",
         "period": f"Datos de población: {int(analysis['population_year'].max())}",
+        "cluster_assignments_published": clusters_published,
         "target_description": (
             "Comparativa municipal basada en la tabla Gold procesada del "
             "repositorio. Las cifras económicas son escenarios, no previsiones."
@@ -87,9 +95,10 @@ def build_study(
             else "No se publica una selección de candidatos porque falta el "
             "artefacto del modelo."
         ),
-        "missing_artifacts": (
-            [] if has_model_candidates else [candidates_artifact]
-        ),
+        "missing_artifacts": [
+            *([] if has_model_candidates else [candidates_artifact]),
+            *([] if clusters_published else [MODEL_CLUSTERS_S3_KEY]),
+        ],
         "revenue_method": (
             f"Escenario {scenario} con la regla de facturación "
             f"{'cuota por atractivo' if revenue_rule == 'C' else 'demanda no cubierta'}. "
@@ -108,7 +117,7 @@ def build_study(
         "limitations": [
             "Las coordenadas del mapa representan un punto interior de cada polígono municipal Silver; no son una ubicación de gimnasio.",
             "Gold agrupa gimnasios y otras instalaciones deportivas, sin distinguir todos sus tipos.",
-            "El artefacto del modelo publica candidatos, no clusters para todos los municipios; el resto aparece como asignación no publicada.",
+            "Las asignaciones completas incluyen solo municipios con las variables necesarias para el clustering; los municipios restantes quedan fuera del clustering.",
             "Gold y Silver no incluyen auditorías de mercado, turismo ni secciones censales.",
             "La facturación y la viabilidad son escenarios basados en supuestos, no predicciones.",
         ],
@@ -119,6 +128,14 @@ def build_study(
                     f"Candidatos · {MODEL_CANDIDATES_S3_KEY}"
                     if has_model_candidates
                     else "Candidatos del modelo · no disponibles"
+                ),
+                "url": None,
+            },
+            {
+                "label": (
+                    f"Asignaciones de cluster · {MODEL_CLUSTERS_S3_KEY}"
+                    if clusters_published
+                    else "Asignaciones de cluster · no disponibles"
                 ),
                 "url": None,
             },
@@ -146,7 +163,11 @@ def build_study(
         cluster = (
             str(int(cluster_value))
             if pd.notna(cluster_value)
-            else "Asignación no publicada"
+            else (
+                "Fuera del clustering"
+                if clusters_published
+                else "Asignación no publicada"
+            )
         )
         is_candidate = bool(row.get("candidate_flag", False))
         if has_model_candidates and is_candidate and row.get("viable", False):
@@ -306,9 +327,9 @@ def render_study(study: dict) -> str:
         missing = ", ".join(escape(str(artifact)) for artifact in missing_artifacts)
         warning = (
             '<div class="data-warning" role="status">'
-            "<strong>Faltan datos del modelo.</strong> No está disponible "
-            f"{missing}. El resto del dashboard se carga, pero las "
-            "recomendaciones no estarán disponibles hasta publicar el artefacto."
+            "<strong>Faltan artefactos del modelo.</strong> No están disponibles "
+            f"{missing}. El dashboard muestra los datos disponibles, pero la "
+            "asignación de grupos y/o las recomendaciones pueden estar incompletas."
             "</div>"
         )
     return (
