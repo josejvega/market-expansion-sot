@@ -110,7 +110,9 @@ escenarios, no ventas observadas ni predicciones. El punto de equilibrio usa
 los costes fijos, cuota anual y capacidad del escenario central. Como el
 proyecto no documenta un porcentaje de costes variables, la interfaz muestra
 inicialmente 5% editable solo como ejemplo, no como dato real. La gráfica
-recorre el rango de costes variables del 0% al 30% y sombrea el tramo en que
-los abonados estimados no superan la capacidad indicada. Los recuentos de
-competencia proceden de OpenStreetMap y no permiten concluir que un municipio
-carezca realmente de competidores.
+representa en una sola escala los ingresos, los costes fijos, los costes
+variables y los costes totales según el número de abonados. El cruce entre
+ingresos y costes totales marca el punto de equilibrio; una línea discontinua
+indica la capacidad del centro. Los recuentos de competencia proceden de
+OpenStreetMap y no permiten concluir que un municipio carezca realmente de
+competidores.

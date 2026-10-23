@@ -185,8 +185,11 @@ class Portable2DashboardTests(unittest.TestCase):
         self.assertIn("profitability-answer-faq", html)
         self.assertIn("variable-cost', finance.variable_cost_ratio == null ? 5", html)
         self.assertIn("break-even-chart", html)
-        self.assertIn("punto dulce llega hasta aproximadamente", html)
-        self.assertIn("El ejemplo actual está marcado", html)
+        self.assertIn("ingresos, costes fijos, costes variables y costes totales", html)
+        self.assertIn("Costes totales", html)
+        self.assertIn("Equilibrio:", html)
+        self.assertIn("Capacidad", html)
+        self.assertNotIn("Facturación mínima y abonados necesarios para cada porcentaje", html)
         self.assertNotIn("<th>Score</th>", html)
         self.assertIn("el modelo no publica un score propio", html)
         self.assertIn("Oferta registrada en cada grupo", html)
@@ -210,9 +213,9 @@ class Portable2DashboardTests(unittest.TestCase):
     def test_static_assets_match_integrated_portable2_files(self) -> None:
         web_dir = Path(__file__).resolve().parent / "web"
         expected_hashes = {
-            "streamlit.html": "db448a01eaa946411c350834e908e0259440cbea054208eb568e9c9501a9f51f",
+            "streamlit.html": "063b3e1bf1a6a5a3942b96a04ffd4b89db26dd0c53c12187a3981ba9349eb3ae",
             "streamlit.css": "50ef0719cc56a6095f19dcd70cce3b07dd8fa349113cc895e8cd60b48257b064",
-            "streamlit_analysis.js": "9991659527ae05c145c79a7792decfa900189821807a4e8e0297ebbd41a82701",
+            "streamlit_analysis.js": "d8ceab817d17a1bd93160ea80a03f399c682898c189b936f0897b5c4e737ca4e",
         }
 
         for filename, expected_hash in expected_hashes.items():
