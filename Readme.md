@@ -85,7 +85,7 @@ Esta configuración guarda las salidas en S3 y utiliza memoria y archivos tempor
 
 **Pruebas:** ejecuta `python -m unittest discover -s tests -v` y repite con `-s streamlit_portable` para la interfaz. Complementan, pero no sustituyen, la ejecución completa.
 
-**Desarrollo local en Windows:** crea el entorno con `python -m venv .venv` y utiliza `.\.venv\Scripts\python.exe` en los comandos posteriores. Instala las mismas dependencias y copia [`.env.example`](.env.example) a `.env` si no existe. Configura `SAVE_LOCALLY=true`, `SAVE_S3=false` y deja `S3_BUCKET` vacío para evitar lecturas de S3. Sigue la misma secuencia de notebooks. Las salidas se guardan en `data`, excluido de Git; Gold en `data/processed/gold/` y candidatos en `data/results/`.
+**Desarrollo local en Windows:** crea el entorno con `python -m venv .venv` y utiliza `.\.venv\Scripts\python.exe` en los comandos posteriores. Instala las mismas dependencias y copia [`.env.example`](.env.example) a `.env` si no existe. Configura `SAVE_S3=true`, un `S3_BUCKET` válido y credenciales AWS; `SAVE_LOCALLY=true` conserva además copias locales. Así, las ejecuciones locales también publican sus salidas en S3. Sigue la misma secuencia de notebooks.
 
 ## 2. Método e interpretación
 
