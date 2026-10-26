@@ -1,0 +1,84 @@
+Muestra aleatoria de 20 registros clasificados como gimnasio en gyms_with_municipality_andalusia.parquet.
+
+Metodo de comprobacion: para cada registro se busco primero el nombre y el municipio en Google Maps. Cuando la ficha de Maps no era clara, no coincidia exactamente o el enlace no era accesible, se contrasto con la web oficial o con otra fuente publicada, indicada en la entrada. 
+Una ficha o un directorio confirma que existe una referencia publica del centro, pero no necesariamente que siga abierto hoy. Se indican tambien los casos en que la fuente solo confirma un pabellon o un centro deportivo especializado, no un gimnasio convencional.
+
+1. 436016028, Vals Sport Ciudad Jardin, Malaga
+   Google Maps: https://maps.app.goo.gl/8rJr4maWScNCMETq8
+   Verificacion: la ficha de Maps abre como "Vals Sport Ciudad Jardin". La ubicacion coincide; el nombre del registro tenia una errata ("Vallsport").
+
+2. 1502190241, Bunkai Functional Training, Huercal de Almeria
+   Google Maps: https://maps.app.goo.gl/JkK1wk6ditB4y8NW6
+   Verificacion: la ficha de Maps muestra "Bunkai Functional Training" en Huercal de Almeria. Coincide con el centro, aunque no exactamente con el nombre "Bunkai Functional Fitness" del registro.
+
+3. 4512584749, e-fitness (Ahora egosport), Almeria
+   Web oficial: https://egosportcenter.es/
+   Verificacion: se busco primero en Google Maps y se contrasto con la web oficial, que identifica Ego Sport Center en Av. Cabo de Gata, 36, Almeria. La web confirma el centro actual, pero no acredita por si sola su relacion historica con el nombre "e-fitness".
+
+4. 14252557992, Centro Deportivo Aragon, Cadiz
+   Google Maps: https://maps.app.goo.gl/zsutnqRNYDQe5qjA9
+   Verificacion: la ficha de Maps muestra "Centro Deportivo Aragon" en Cadiz, coincidente con el registro.
+
+5. 14049500423, I Love Pilates, Malaga
+   Google Maps: https://maps.app.goo.gl/1N7pW5S2kV2q5dM6A
+   Verificacion: la ficha de Maps muestra "I Love Pilates" en Malaga. Es un centro especializado en Pilates, no necesariamente un gimnasio convencional.
+
+6. 13482942401, Fit Box Chiclana, Chiclana de la Frontera
+   Google Maps: https://maps.app.goo.gl/UcdsbvJpEXXkX2HPA
+   Verificacion: la ficha de Maps muestra "FIT BOX Chiclana" en el municipio indicado.
+
+7. 488081267, Pabellon Municipal de Deportes, Paterna de Rivera
+   Fuente deportiva: https://sporttia.com/centros/excmo-ayuntamiento-de-paterna-de-rivera
+   Verificacion: se busco en Google Maps, pero el enlace RFAF original no era accesible sin iniciar sesion. Sporttia confirma el Pabellon Polideportivo Municipal como pista multiusos; no confirma que haya una sala de gimnasio equipada.
+
+8. 13031031413, YambaGym, Hinojosa del Duque
+   Google Maps: https://maps.app.goo.gl/gsh47NhWyhGMzBMf6
+   Verificacion: la ficha de Maps muestra "YambaGym" en Hinojosa del Duque, coincidente con el registro.
+
+9. 9017375043, Bikram Yoga Spain Sevilla, Sevilla
+   Google Maps: https://maps.app.goo.gl/sK1F6EJTZFWZPx3c6
+   Verificacion: la ficha de Maps muestra "Bikram Yoga Spain Sevilla". Se trata de un estudio especializado en yoga, no necesariamente de un gimnasio convencional.
+
+10. 11279267794, Taebe Kim Taekwondo, Burguillos
+    Google Maps: https://maps.app.goo.gl/We9JygxJsUfiTxZv9
+    Verificacion: la ficha de Maps muestra "Taebe Kim Taek Wondo". La web municipal tambien lista el Club de Taekwondo y Zumba Taebe Kim: https://www.burguillos.es/es/municipio/asociaciones/Club-de-Taekwondo-y-zumba-Taebe-Kim. Es un club de artes marciales/actividad deportiva.
+
+11. 12884037506, Holkan Box, Olivares
+    Google Maps: https://maps.app.goo.gl/vmrbAHjgDrfPfnwG7
+    Verificacion: la ficha de Maps muestra "Holkan Box" en Olivares. El nombre "Holland Box" del registro no coincide con el que aparece en Maps.
+
+12. 14020220546, Pure Muscle, Roquetas de Mar
+    Google Maps: https://maps.app.goo.gl/q9gxV91tq7nryEMV8
+    Verificacion: la ficha de Maps muestra "PURE MUSCLE GYM" en Roquetas de Mar, coincidente con el centro.
+
+13. 11405960881, Basic-Fit, La Linea de la Concepcion
+    Google Maps: https://maps.app.goo.gl/ifwQf6nxevyahLiX7
+    Verificacion: la ficha de Maps muestra Basic-Fit en La Linea. Un directorio adicional identifica el club en CC Gran Sur, Avenida de la Colonia, 9: https://www.tugimnasio.es/listings/basic-fit-la-linea-de-la-concepcion-avenida-de-la-colonia-9/.
+
+14. 479765892, Pabellon Municipal de Deportes, Bornos
+    Portal deportivo municipal: https://dipusport.bornos.es/
+    Verificacion: se busco en Google Maps, pero el enlace RFAF original no era accesible sin iniciar sesion. El portal municipal de alquiler de instalaciones lista el Pabellon; esto confirma la instalacion deportiva, pero no una sala de gimnasio equipada.
+
+15. 13363386173, Flow, Granada
+    Google Maps: https://maps.app.goo.gl/SkJu1zRiAdqmjwxu6
+    Verificacion: la ficha de Maps muestra "Flow | Pilates - Osteopatia" en Granada. Es un centro especializado en Pilates y osteopatia; el nombre del registro es abreviado.
+
+16. 1073811768, Gimnasio Municipal, Freila
+    Fuentes consultadas: https://zokko.es/servicios/gimnasios/freila/gimnasio-municipal-122247 y https://www.facebook.com/people/Gimnasio-Municipal-de-Freila/100064144260804/
+    Verificacion: se busco primero en Google Maps; Zokko y una pagina de Facebook muestran referencias con ese nombre. No se encontro una confirmacion municipal inequívoca ni evidencia suficiente para asegurar que siga abierto actualmente; conviene confirmarlo directamente con el Ayuntamiento.
+
+17. 9563213153, Club Ortiz, Granada
+    Google Maps: https://maps.app.goo.gl/REVAp3H8MzPDFNnw8
+    Verificacion: la ficha de Maps muestra "Gimnasio Ortiz | Gimnasio en Granada", no "Club Ortiz". La ficha confirma un gimnasio en Granada, pero la diferencia de nombre deja pendiente confirmar que sea exactamente el mismo establecimiento del registro.
+
+18. 6594893942, Star Fitness, Cordoba
+    Google Maps: https://maps.app.goo.gl/eCyPVKnG5mhKnAx68
+    Verificacion: la ficha de Maps muestra "Star Fitness" en Cordoba, coincidente con el registro.
+
+19. 13109000158, Loal Fit, Motril
+    Fuentes consultadas: https://zokko.es/servicios/gimnasios/motril/loal-fit-121531 y https://mapcarta.com/es/N13109000158
+    Verificacion: se busco primero en Google Maps; los directorios consultados identifican Loal Fit como club de salud/gimnasio en Motril y Mapcarta lo vincula al nodo de OpenStreetMap del registro. No se encontro una fuente oficial independiente ni confirmacion de actividad actual.
+
+20. 12344927847, Lobero Fit, El Ejido
+    Directorio de gimnasios: https://gimnasios.fitness/es/i/3537-lobero-fit/
+    Verificacion: se busco primero en Google Maps y se contrasto con este directorio, que identifica Lobero Fit en El Ejido e incluye direccion y datos de contacto. La fuente confirma la referencia del centro, no necesariamente su actividad actual.
