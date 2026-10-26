@@ -1,6 +1,6 @@
 Muestra aleatoria de 20 registros clasificados como gimnasio en gyms_with_municipality_andalusia.parquet.
 
-Metodo de comprobacion: para cada registro se busco primero el nombre y el municipio en Google Maps. Cuando la ficha de Maps no era clara, no coincidia exactamente o el enlace no era accesible, se contrasto con la web oficial o con otra fuente publicada, indicada en la entrada. 
+Metodo de comprobacion: para cada registro se busco primero el nombre y el municipio en Google Maps. Cuando la ficha de Maps no era clara, no coincidia exactamente o el enlace no era accesible, se contrasto con la web oficial o con otra fuente publicada, indicada en la entrada.
 Una ficha o un directorio confirma que existe una referencia publica del centro, pero no necesariamente que siga abierto hoy. Se indican tambien los casos en que la fuente solo confirma un pabellon o un centro deportivo especializado, no un gimnasio convencional.
 
 1. 436016028, Vals Sport Ciudad Jardin, Malaga
@@ -65,7 +65,7 @@ Una ficha o un directorio confirma que existe una referencia publica del centro,
 
 16. 1073811768, Gimnasio Municipal, Freila
     Fuentes consultadas: https://zokko.es/servicios/gimnasios/freila/gimnasio-municipal-122247 y https://www.facebook.com/people/Gimnasio-Municipal-de-Freila/100064144260804/
-    Verificacion: se busco primero en Google Maps; Zokko y una pagina de Facebook muestran referencias con ese nombre. No se encontro una confirmacion municipal inequívoca ni evidencia suficiente para asegurar que siga abierto actualmente; conviene confirmarlo directamente con el Ayuntamiento.
+    Verificacion: se busco primero en Google Maps; Zokko y una pagina de Facebook muestran referencias con ese nombre. No se encontro una confirmacion municipal inequivoca ni evidencia suficiente para asegurar que siga abierto actualmente; conviene confirmarlo directamente con el Ayuntamiento.
 
 17. 9563213153, Club Ortiz, Granada
     Google Maps: https://maps.app.goo.gl/REVAp3H8MzPDFNnw8

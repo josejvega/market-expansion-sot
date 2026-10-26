@@ -95,6 +95,8 @@ La competencia no interviene en el entrenamiento: se utiliza después para selec
 
 **Limitaciones:** OSM no equivale a una auditoría de mercado; la ausencia de registros no demuestra ausencia de competencia. Población y renta pueden corresponder a años distintos. Las actualizaciones de fuentes y dependencias pueden modificar los resultados. Los escenarios no contemplan toda la inversión ni los riesgos, y el mapa representa municipios, no emplazamientos propuestos. Consulta las [transformaciones](market_expansion_gimnasios.md) y los [supuestos económicos](src/negocio/supuestos.py).
 
+La muestra aleatoria de 20 registros OSM clasificados como gimnasio se revisó mediante Google Maps y fuentes públicas alternativas cuando fue necesario. El método, el resumen y las limitaciones están en [docs/validacion_20_gimnasios.md](docs/validacion_20_gimnasios.md). La revisión confirma referencias públicas, pero no equivale a confirmar que los 20 sean gimnasios convencionales activos.
+
 ## 3. Fuentes, atribución y licencias
 
 | Fuente y autoría | Uso y condiciones |
