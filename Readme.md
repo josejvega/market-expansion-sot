@@ -36,6 +36,8 @@ flowchart LR
 
 Bronze conserva los datos de origen; Silver contiene los datos depurados y los cruces geográficos; Gold reúne los indicadores municipales para el análisis. El modelo publica los candidatos en S3, negocio evalúa su potencial económico y Streamlit presenta los resultados. La ejecución local se mantiene como alternativa de desarrollo.
 
+El diagrama editable está disponible en [docs/Arquitectura.drawio](docs/Arquitectura.drawio) y su exportación en [docs/Arquitectura.png](docs/Arquitectura.png). El diagrama representa la arquitectura objetivo por capas.
+
 **Requisitos:** Python 3.11 recomendado, conexión a Internet, un bucket S3 y una instancia EC2 con un rol IAM autorizado para leer y escribir los objetos del proyecto. Para ejecutar los notebooks, conecta VS Code a EC2 mediante Remote - SSH e instala las extensiones Python y Jupyter en el entorno remoto. Utiliza las credenciales temporales del rol, sin guardar claves AWS.
 
 ### Preparar el entorno
@@ -95,7 +97,9 @@ La competencia no interviene en el entrenamiento: se utiliza después para selec
 
 **Limitaciones:** OSM no equivale a una auditoría de mercado; la ausencia de registros no demuestra ausencia de competencia. Población y renta pueden corresponder a años distintos. Las actualizaciones de fuentes y dependencias pueden modificar los resultados. Los escenarios no contemplan toda la inversión ni los riesgos, y el mapa representa municipios, no emplazamientos propuestos. Consulta las [transformaciones](market_expansion_gimnasios.md) y los [supuestos económicos](src/negocio/supuestos.py).
 
-La muestra aleatoria de 20 registros OSM clasificados como gimnasio se revisó mediante Google Maps y fuentes públicas alternativas cuando fue necesario. El método, el resumen y las limitaciones están en [docs/validacion_20_gimnasios.md](docs/validacion_20_gimnasios.md). La revisión confirma referencias públicas, pero no equivale a confirmar que los 20 sean gimnasios convencionales activos.
+### Validación manual de competencia
+
+Se revisó una muestra aleatoria de 20 registros OSM clasificados como gimnasio mediante Google Maps y fuentes públicas alternativas cuando fue necesario. El [resumen de validación](docs/validacion_20_gimnasios.md) recoge el método, los resultados y las limitaciones, mientras que el detalle de cada registro se conserva en el [TXT de evidencia](docs/validacion_20_gimnasios.txt). La revisión confirma referencias públicas, pero no equivale a confirmar que los 20 sean gimnasios convencionales activos.
 
 ## 3. Fuentes, atribución y licencias
 
