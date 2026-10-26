@@ -1,14 +1,28 @@
 """
-ejecutar.py  -  T5 de principio a fin.
-Uso (desde la raíz del repo):  python -m src.negocio.ejecutar
+ejecutar.py - Negocio (T5) de principio a fin.
+
+Uso (desde la raíz del repositorio):
+    python -m src.negocio.ejecutar
 
 Entrada:
-  - data/processed/gold/tabla_oro_municipios_andalucia.parquet
-  - data/results/clusters.parquet (asignaciones del notebook del modelo)
-Salida (data/outputs/, ignorado por Git):
-  - municipios_evaluados_<pesos>.csv, baseline_<pesos>.csv, top_facturacion_<pesos>.csv
-  - si hay clusters: seleccion_modelo_<pesos>.csv, comparacion_<pesos>.csv,
-    sensibilidad_detalle.csv, sensibilidad_frecuencias.csv
+    - Tabla Gold municipal.
+    - Asignaciones de cluster generadas por el modelo.
+
+Salida (según SAVE_LOCALLY / SAVE_S3):
+  - Local: data/outputs/ (ignorada por Git).
+  - S3: results/negocio/
+Archivos:
+    - baseline_central.csv
+    - seleccion_modelo_central.csv
+    - modelo_pendiente_validacion.csv
+    - ranking_modelo_completo.csv
+    - sustituciones_por_calidad.csv
+    - seleccion_diversificada_clusters_central.csv
+    - comparacion_estrategias_central.csv
+    - municipios_evaluados_central.csv
+    - sensibilidad_detalle.csv
+    - sensibilidad_frecuencias.csv
+    - tablas_definitivas_negocio.md
 """
 import io
 from pathlib import Path
@@ -27,65 +41,181 @@ from src.procesado.common.paths import DATA_DIR, GOLD_TABLE_PATH
 
 from .supuestos import parametros
 from .valor_negocio import (
-    evaluar, sensibilidad, top5_baseline, top5_diversificado_clusters,
-    top5_facturacion, top5_modelo, seleccionar_modelo_con_calidad,
+    evaluar,
+    seleccionar_modelo_con_calidad,
+    sensibilidad,
+    top5_baseline,
+    top5_diversificado_clusters,
 )
 
+
 ORO = GOLD_TABLE_PATH
-QUALITY_TABLE_PATH = DATA_DIR / "processed" / "quality" / "municipios_dudosos_gimnasios.parquet"
 SALIDA = DATA_DIR / "outputs"
 BUSINESS_RESULTS_PREFIX = "results/negocio"
-NECESARIAS = ["municipality_code", "municipality_name", "population_18_50",
-              "gyms_count", "other_sports_facilities_count"]
+NOMBRE_INFORME = "tablas_definitivas_negocio.md"
+
+# Archivos que versiones anteriores publicaban en S3 y que ya no se generan.
+# Se borran de results/negocio/ para que no queden resultados obsoletos.
+SALIDAS_S3_OBSOLETAS = ("resumen_negocio.md", "top_facturacion_central.csv")
+
+NECESARIAS = [
+    "municipality_code",
+    "municipality_name",
+    "population_18_50",
+    "gyms_count",
+    "other_sports_facilities_count",
+]
+
+ESTRATEGIAS = {
+    "Baseline": "baseline",
+    "Modelo": "modelo",
+    "Modelo diversificado por clusters": "diversificada",
+}
+
+# Salidas actuales y antiguas que T5 gestiona. Se eliminan antes de escribir
+# para no mezclar resultados obsoletos con los nuevos.
 ESCENARIOS_ANTERIORES = ("solo_gimnasios", "central", "todo_igual")
-PREFIJOS_T5_ANTERIORES = (
-    "municipios_evaluados", "baseline", "top_facturacion", "seleccion_modelo",
+PREFIJOS_ANTERIORES = (
+    "municipios_evaluados",
+    "baseline",
+    "top_facturacion",
+    "seleccion_modelo",
     "comparacion",
 )
 ARCHIVOS_T5_GESTIONADOS = {
     f"{prefijo}_{escenario}.csv"
-    for prefijo in PREFIJOS_T5_ANTERIORES
+    for prefijo in PREFIJOS_ANTERIORES
     for escenario in ESCENARIOS_ANTERIORES
 } | {
     "municipios_evaluados_variantes_central.csv",
     "seleccion_modelo_variantes_central.csv",
     "comparacion_variantes_central.csv",
-    "seleccion_diversificada_clusters_central.csv",
-    "comparacion_estrategias_central.csv",
     "modelo_pendiente_validacion.csv",
     "ranking_modelo_completo.csv",
     "sustituciones_por_calidad.csv",
+    "seleccion_diversificada_clusters_central.csv",
+    "comparacion_estrategias_central.csv",
     "sensibilidad_detalle.csv",
     "sensibilidad_frecuencias.csv",
     "resumen_negocio.md",
+    "tablas_definitivas_negocio.md",
 }
 
 
+# ============================================================
+# FORMATO
+# ============================================================
+
 def formato_numero(valor, decimales=0):
-    """Formatea cifras con separadores habituales en español."""
-    if pd.isna(valor):
+    """Formatea cifras en estilo español: 2.649.735 o 2.208,9."""
+    if valor is None or pd.isna(valor):
         return "—"
-    return (f"{valor:,.{decimales}f}".replace(",", "\0")
-            .replace(".", ",").replace("\0", "."))
+    texto = f"{float(valor):,.{decimales}f}"
+    return texto.replace(",", "\0").replace(".", ",").replace("\0", ".")
 
 
-def formato_con_sufijo(valor, decimales, sufijo):
-    texto = formato_numero(valor, decimales)
-    return texto if texto == "—" else texto + sufijo
+def fmt_entero(valor):
+    return formato_numero(valor, 0)
+
+
+def fmt_dec1(valor):
+    return formato_numero(valor, 1)
+
+
+def fmt_dec2(valor):
+    return formato_numero(valor, 2)
+
+
+def fmt_eur(valor):
+    texto = formato_numero(valor, 0)
+    return texto if texto == "—" else f"{texto} €"
+
+
+def fmt_pct(valor):
+    texto = formato_numero(valor, 1)
+    return texto if texto == "—" else f"{texto} %"
+
+
+def fmt_pct_fraccion(valor):
+    """Convierte 0,314 en 31,4 %."""
+    if valor is None or pd.isna(valor):
+        return "—"
+    return fmt_pct(float(valor) * 100)
+
+
+def fmt_ratio(valor):
+    texto = formato_numero(valor, 2)
+    return texto if texto == "—" else f"{texto}×"
+
+
+def fmt_bool(valor):
+    if valor is None or pd.isna(valor):
+        return "—"
+    if isinstance(valor, str):
+        valor = valor.strip().lower() in {"true", "1", "sí", "si", "yes"}
+    return "Sí" if bool(valor) else "No"
+
+
+def fmt_texto(valor):
+    if valor is None or pd.isna(valor) or str(valor).strip() == "":
+        return "—"
+    return str(valor)
 
 
 def tabla_markdown(encabezados, filas):
-    """Construye una tabla Markdown sin dependencias opcionales."""
-    filas = [[str(valor).replace("|", "\\|").replace("\n", " ") for valor in fila]
-             for fila in filas]
-    lineas = ["| " + " | ".join(encabezados) + " |",
-              "| " + " | ".join(["---"] * len(encabezados)) + " |"]
+    """Construye una tabla Markdown sin dependencias externas."""
+    if not filas:
+        filas = [["—"] * len(encabezados)]
+    filas = [
+        [str(valor).replace("|", "\\|").replace("\n", " ") for valor in fila]
+        for fila in filas
+    ]
+    lineas = [
+        "| " + " | ".join(encabezados) + " |",
+        "| " + " | ".join(["---"] * len(encabezados)) + " |",
+    ]
     lineas.extend("| " + " | ".join(fila) + " |" for fila in filas)
     return "\n".join(lineas)
 
 
+def tabla_desde_df(df, especificacion, quitar_constantes=False):
+    """
+    Convierte un DataFrame en tabla Markdown.
+
+    especificacion: lista de (columna, encabezado, formato).
+    Si quitar_constantes=True y una columna tiene el mismo valor en todas
+    las filas, se elimina de la tabla y se devuelve como nota aparte.
+    """
+    if df is None or df.empty:
+        return "_Sin resultados._", []
+
+    columnas = [item for item in especificacion if item[0] in df.columns]
+    notas = []
+
+    if quitar_constantes and len(df) > 1:
+        conservadas = []
+        for columna, encabezado, formato in columnas:
+            valores = df[columna].map(formato)
+            if valores.nunique(dropna=False) == 1 and columna != "municipality_name":
+                notas.append(f"**{encabezado}:** {valores.iloc[0]} en todos los municipios.")
+            else:
+                conservadas.append((columna, encabezado, formato))
+        columnas = conservadas
+
+    encabezados = [encabezado for _, encabezado, _ in columnas]
+    filas = [
+        [formato(fila[columna]) for columna, _, formato in columnas]
+        for _, fila in df.iterrows()
+    ]
+    return tabla_markdown(encabezados, filas), notas
+
+
+# ============================================================
+# LIMPIEZA DE SALIDAS
+# ============================================================
+
 def limpiar_salidas_t5(directorio=SALIDA):
-    """Elimina solo nombres de salida conocidos y gestionados por T5."""
+    """Elimina únicamente los archivos conocidos y gestionados por T5."""
     if not directorio.exists():
         return []
     eliminados = []
@@ -97,25 +227,41 @@ def limpiar_salidas_t5(directorio=SALIDA):
     return eliminados
 
 
+def limpiar_salidas_obsoletas_s3():
+    """Borra de S3 los archivos que versiones anteriores publicaban y ya no se generan."""
+    settings = get_storage_settings()
+    if not settings.save_s3 or not settings.bucket_name:
+        return []
+    client_options = {"region_name": settings.region_name} if settings.region_name else {}
+    eliminados = []
+    try:
+        client = boto3.client("s3", **client_options)
+        for nombre in SALIDAS_S3_OBSOLETAS:
+            key = f"{BUSINESS_RESULTS_PREFIX}/{nombre}"
+            client.delete_object(Bucket=settings.bucket_name, Key=key)
+            eliminados.append(key)
+    except (BotoCoreError, ClientError) as error:
+        print(f"Aviso: no se pudieron borrar salidas obsoletas de S3 ({error}).")
+    return eliminados
+
+
 def guardar_salidas_negocio(
     archivos: dict[str, pd.DataFrame],
-    reporte: str,
+    informe: str,
     directorio: Path = SALIDA,
 ) -> dict[str, Union[Path, str]]:
-    """Persist business tables and report locally, to S3, or to both."""
+    """Guarda las tablas CSV y el informe Markdown en local, en S3 o en ambos."""
     if not archivos:
         raise ValueError("Debe proporcionarse al menos una tabla de negocio.")
-    if "resumen_negocio.md" in archivos:
-        raise ValueError("'resumen_negocio.md' está reservado para el informe.")
-    nombres = [*archivos, "resumen_negocio.md"]
+    if NOMBRE_INFORME in archivos:
+        raise ValueError(f"'{NOMBRE_INFORME}' está reservado para el informe.")
+    nombres = [*archivos, NOMBRE_INFORME]
     if any(Path(nombre).name != nombre for nombre in nombres):
         raise ValueError("Los nombres de salida deben ser nombres de archivo.")
 
     settings = get_storage_settings()
     if not settings.save_locally and not settings.save_s3:
-        raise RuntimeError(
-            "Las salidas de negocio requieren SAVE_LOCALLY o SAVE_S3."
-        )
+        raise RuntimeError("Las salidas de negocio requieren SAVE_LOCALLY o SAVE_S3.")
 
     def escribir_salidas(directorio_salida: Path) -> list[Path]:
         directorio_salida.mkdir(parents=True, exist_ok=True)
@@ -124,9 +270,9 @@ def guardar_salidas_negocio(
             ruta = directorio_salida / nombre
             tabla.to_csv(ruta, index=False, encoding="utf-8-sig")
             paths.append(ruta)
-        ruta_reporte = directorio_salida / "resumen_negocio.md"
-        ruta_reporte.write_text(reporte, encoding="utf-8")
-        paths.append(ruta_reporte)
+        ruta_informe = directorio_salida / NOMBRE_INFORME
+        ruta_informe.write_text(informe, encoding="utf-8")
+        paths.append(ruta_informe)
         return paths
 
     if settings.save_locally:
@@ -156,154 +302,15 @@ def guardar_salidas_negocio(
     return {path.name: path for path in paths}
 
 
-ESTRATEGIAS = {
-    "Baseline": "baseline",
-    "Máxima facturación sin clusters": "maxima_facturacion",
-    "Modelo A oficial": "modelo_a",
-    "Alternativa diversificada por clusters": "diversificada",
-}
-ESTRATEGIAS_REPORTE = {
-    "Baseline": "baseline",
-    "Modelo": "modelo_a",
-    "Alternativa diversificada por clusters": "diversificada",
-}
-
-
-def tabla_seleccion(tabla, incluir_diagnosticos=False, incluir_motivo=False):
-    """Formatea una estrategia en una tabla Markdown orientada a decisión."""
-    encabezados = [
-        "Posición", "Municipio", "Cluster", "Población 18-50", "Competidores ponderados",
-        "Facturación anual con tope (EUR)", "Facturación anual sin tope (EUR)",
-        "Margen anual (EUR)", "quality_flag",
-        "weighted_observed_vs_expected_pct", "quality_status",
-    ]
-    if incluir_diagnosticos:
-        encabezados.extend([
-            "Competencia por 10.000", "Media de competencia del cluster",
-            "Colchón de demanda",
-        ])
-    if incluir_motivo:
-        encabezados.append("Motivo de selección")
-
-    filas = []
-    for indice, (_, fila) in enumerate(tabla.iterrows(), start=1):
-        posicion = fila.get("posicion", indice)
-        valores = [
-            formato_numero(posicion), fila["municipality_name"],
-            formato_numero(fila.get("cluster", np.nan)),
-            formato_numero(fila["population_18_50"]),
-            formato_numero(fila["competidores_pond"], 1),
-            formato_numero(fila["facturacion_anual"]),
-            formato_numero(fila["facturacion_sin_tope_capacidad"]),
-            formato_numero(fila["margen_eur"]),
-            "True" if bool(fila.get("quality_flag", False)) else "False",
-            formato_con_sufijo(
-                fila.get("weighted_observed_vs_expected_pct", np.nan), 2, "%"
-            ),
-            fila.get("quality_status", ""),
-        ]
-        if incluir_diagnosticos:
-            valores.extend([
-                formato_numero(fila["comp_per_10k_18_50"], 2),
-                formato_numero(fila["media_cluster_comp_per_10k"], 2),
-                formato_con_sufijo(fila["colchon_demanda_pct"] * 100, 1, "%"),
-            ])
-        if incluir_motivo:
-            valores.append(fila.get("motivo_seleccion", ""))
-        filas.append(valores)
-    if not filas:
-        filas = [["—"] * len(encabezados)]
-    return tabla_markdown(encabezados, filas)
-
-
-def tabla_baseline(tabla):
-    """Formatea el baseline obligatorio, incluyendo viabilidad y avisos."""
-    encabezados = [
-        "Posición", "Municipio", "Cluster", "Población 18-50",
-        "Competidores ponderados", "Facturación anual con tope (EUR)",
-        "Facturación anual sin tope (EUR)", "Margen anual (EUR)", "Viable", "quality_flag",
-        "weighted_observed_vs_expected_pct", "quality_status",
-    ]
-    filas = []
-    for posicion, (_, fila) in enumerate(tabla.iterrows(), start=1):
-        filas.append([
-            formato_numero(posicion), fila["municipality_name"],
-            formato_numero(fila.get("cluster", np.nan)),
-            formato_numero(fila["population_18_50"]),
-            formato_numero(fila["competidores_pond"], 1),
-            formato_numero(fila["facturacion_anual"]),
-            formato_numero(fila["facturacion_sin_tope_capacidad"]),
-            formato_numero(fila["margen_eur"]),
-            "Sí" if fila["viable"] else "No",
-            "True" if bool(fila.get("quality_flag", False)) else "False",
-            formato_con_sufijo(
-                fila.get("weighted_observed_vs_expected_pct", np.nan), 2, "%"
-            ),
-            fila.get("quality_status", ""),
-        ])
-    if not filas:
-        filas = [["—"] * len(encabezados)]
-    return tabla_markdown(encabezados, filas)
-
-
-def tabla_municipios_validacion(pendientes):
-    """Tabla de oportunidades descartadas o pendientes por calidad."""
-    encabezados = [
-        "Posición económica original", "Municipio", "Competidores ponderados",
-        "Gimnasios equivalentes esperados", "Cobertura ponderada",
-        "Facturación anual sin tope (EUR)", "Facturación con tope (EUR)",
-        "Motivo", "Estado de calidad",
-    ]
-    filas = [[
-        formato_numero(fila.get("posicion_ranking_precalidad", np.nan)),
-        fila["municipality_name"],
-        formato_numero(fila.get("competidores_pond", np.nan), 1),
-        formato_numero(fila.get("expected_gyms", np.nan), 2),
-        formato_con_sufijo(
-            fila.get("weighted_observed_vs_expected_pct", np.nan), 2, "%"
-        ),
-        formato_numero(fila.get("facturacion_sin_tope_capacidad", np.nan)),
-        formato_numero(fila.get("facturacion_anual", np.nan)),
-        fila.get("motivo_calidad", ""),
-        fila.get("quality_status", ""),
-    ] for _, fila in pendientes.iterrows()]
-    if not filas:
-        filas = [["—"] * len(encabezados)]
-    return tabla_markdown(encabezados, filas)
-
-def tabla_indicadores_complementarios(selecciones):
-    encabezados = [
-        "Estrategia", "Municipio", "Socios captables", "Ratio de capacidad",
-        "Potencial teórico sin límite de capacidad (EUR)",
-    ]
-    filas = []
-    for estrategia, clave in ESTRATEGIAS_REPORTE.items():
-        for _, fila in selecciones[clave].iterrows():
-            filas.append([
-                estrategia,
-                fila["municipality_name"],
-                formato_numero(fila.get("socios_captables", np.nan)),
-                formato_con_sufijo(fila.get("ratio_capacidad", np.nan), 2, "×"),
-                formato_numero(fila.get("facturacion_sin_tope_capacidad", np.nan)),
-            ])
-    if not filas:
-        filas = [["—"] * len(encabezados)]
-    return tabla_markdown(encabezados, filas)
-
+# ============================================================
+# MÉTRICAS DE ESTRATEGIA
+# ============================================================
 
 def resumir_estrategia(nombre, seleccion):
-    """Calcula las métricas comparables de una selección de centros."""
-    avisos = ~seleccion.get(
-        "quality_flag", pd.Series(False, index=seleccion.index)
-    ).fillna(False).astype(bool)
-    nombres_aviso = sorted(
-        seleccion.loc[avisos, "municipality_name"].astype(str).unique()
-    )
-    clusters = int(seleccion["cluster"].nunique()) if "cluster" in seleccion else 0
-    clusters_sin_candidato = seleccion.attrs.get("cluster_sin_candidato_viable", [])
+    """Calcula los KPI comparables de una estrategia."""
 
     def suma(columna):
-        if columna not in seleccion:
+        if seleccion.empty or columna not in seleccion:
             return 0.0
         return float(pd.to_numeric(seleccion[columna], errors="coerce").sum())
 
@@ -315,405 +322,383 @@ def resumir_estrategia(nombre, seleccion):
     return {
         "estrategia": nombre,
         "centros_seleccionados": len(seleccion),
-        "centros_viables": int(seleccion["viable"].fillna(False).sum())
-        if "viable" in seleccion else 0,
-        "facturacion_anual_total_con_tope_eur": suma("facturacion_anual"),
-        "margen_operativo_anual_total_eur": suma("margen_eur"),
+        "centros_viables": (
+            int(seleccion["viable"].fillna(False).astype(bool).sum())
+            if "viable" in seleccion else 0
+        ),
+        "facturacion_operativa_total_eur": suma("facturacion_anual"),
+        "margen_operativo_total_eur": suma("margen_eur"),
         "perdidas_operativas_totales_eur": suma("perdidas_eur"),
-        "margen_medio_por_centro_eur": media("margen_eur"),
+        "potencial_anual_sin_tope_eur": suma("facturacion_sin_tope_capacidad"),
         "demanda_media_por_competidor": media("demanda_por_comp"),
-        "municipios_con_aviso_osm": ", ".join(nombres_aviso),
-        "clusters_representados": clusters,
-        "cluster_sin_candidato_viable": ", ".join(map(str, clusters_sin_candidato)),
+        "clusters_representados": (
+            int(seleccion["cluster"].nunique()) if "cluster" in seleccion else 0
+        ),
     }
 
 
 def crear_comparacion_estrategias(selecciones):
-    """Construye la tabla exportable de las cuatro estrategias centrales."""
+    """Tabla comparativa de Baseline, Modelo y Modelo diversificado."""
     return pd.DataFrame([
         resumir_estrategia(nombre, selecciones[clave])
         for nombre, clave in ESTRATEGIAS.items()
     ])
 
 
-def tabla_comparacion_estrategias(comparacion):
-    encabezados = [
-        "Estrategia", "Centros seleccionados", "Centros viables",
-        "Facturación anual total con tope (EUR)", "Margen operativo anual total (EUR)",
-        "Pérdidas operativas totales (EUR)", "Margen medio por centro (EUR)",
-        "Demanda media por competidor", "Municipios con quality_flag=True",
-        "Clusters representados",
+# ============================================================
+# SECCIONES DEL MARKDOWN DE TABLAS DEFINITIVAS
+# ============================================================
+
+def seccion_referencia_operativa(parametros_centrales):
+    ticket = parametros_centrales["ticket_mensual"]
+    capacidad = parametros_centrales["capacidad"]
+    coste = parametros_centrales["coste_anual_club"]
+
+    facturacion_referencia = capacidad * ticket * 12
+    socios_equilibrio = coste / (ticket * 12)
+
+    return "\n".join([
+        "## Referencia operativa",
+        "",
+        f"- Costes operativos anuales considerados: {fmt_eur(coste)}.",
+        f"- Ticket mensual sin IVA: {formato_numero(ticket, 2)} €.",
+        f"- Punto de equilibrio aproximado: {fmt_entero(socios_equilibrio)} socios.",
+        f"- Capacidad de referencia de un centro estándar: {fmt_entero(capacidad)} socios.",
+        f"- Facturación operativa de referencia a capacidad completa: "
+        f"{fmt_eur(facturacion_referencia)} al año.",
+        "",
+        "La capacidad de referencia no es la capacidad óptima calculada para cada "
+        "municipio. Sirve para comparar todos los municipios con el mismo formato "
+        "de centro. El **potencial anual sin tope** muestra el valor de la demanda "
+        "captable; cuando supera ampliamente la referencia, conviene estudiar un "
+        "centro mayor o varias aperturas y recalcular sus costes.",
+    ])
+
+
+def seccion_comparacion(comparacion):
+    especificacion = [
+        ("estrategia", "Estrategia", fmt_texto),
+        ("centros_seleccionados", "Municipios seleccionados", fmt_entero),
+        ("centros_viables", "Municipios viables", fmt_entero),
+        ("facturacion_operativa_total_eur", "Facturación operativa total", fmt_eur),
+        ("margen_operativo_total_eur", "Margen operativo total", fmt_eur),
+        ("perdidas_operativas_totales_eur", "Pérdidas operativas", fmt_eur),
+        ("potencial_anual_sin_tope_eur", "Potencial anual sin tope", fmt_eur),
+        ("demanda_media_por_competidor", "Demanda media por competidor", fmt_dec1),
+        ("clusters_representados", "Clusters representados", fmt_entero),
     ]
-    columnas = [
-        "estrategia", "centros_seleccionados", "centros_viables",
-        "facturacion_anual_total_con_tope_eur", "margen_operativo_anual_total_eur",
-        "perdidas_operativas_totales_eur", "margen_medio_por_centro_eur",
-        "demanda_media_por_competidor", "municipios_con_aviso_osm", "clusters_representados",
-    ]
-    filas = []
-    for fila in comparacion[columnas].itertuples(index=False, name=None):
-        valores = list(fila)
-        for indice in (1, 2, 9):
-            valores[indice] = formato_numero(valores[indice])
-        for indice in (3, 4, 5, 6):
-            valores[indice] = formato_con_sufijo(valores[indice], 0, " EUR")
-        valores[7] = formato_numero(valores[7], 1)
-        valores[8] = valores[8] or "—"
-        filas.append(valores)
-    return tabla_markdown(encabezados, filas)
+    tabla, _ = tabla_desde_df(comparacion, especificacion)
+    return "\n".join([
+        "## Tabla A. Comparación de estrategias",
+        "",
+        tabla,
+        "",
+        "Las tres estrategias se evalúan con las mismas fórmulas económicas.",
+    ])
 
 
-def tabla_robustez(frecuencias, detalle=None):
-    """Resume estabilidad y muestra la calidad fija del escenario central."""
-    encabezados = [
-        "Municipio", "Apariciones en escenarios", "Posición media cuando aparece",
-        "Facturación mínima cuando aparece (EUR)", "Robustez",
-        "Calidad del dato en escenario central",
-    ]
-    filas = [[
-        fila.municipality_name,
-        formato_numero(fila.apariciones),
-        formato_numero(fila.posicion_media, 1),
-        formato_numero(fila.fact_min),
-        fila.robustez,
-        fila.quality_status_central,
-    ] for fila in frecuencias.head(10).itertuples(index=False)]
-    if not filas:
-        filas = [["—"] * len(encabezados)]
-    return tabla_markdown(encabezados, filas)
-
-def nota_tope_capacidad():
-    return (
-        "Los cálculos utilizan como referencia un club estándar de 2.600 socios. En este "
-        "escenario la facturación máxima operativa sería aproximadamente 697.944 €/año. "
-        "Municipios con demanda superior podrían admitir formatos de mayor capacidad, "
-        "varias aperturas o estrategias comerciales distintas, aspectos fuera del alcance actual."
-    )
+ESPEC_MODELO = [
+    ("posicion", "Posición", fmt_entero),
+    ("municipality_name", "Municipio", fmt_texto),
+    ("cluster", "Cluster", fmt_entero),
+    ("population_18_50", "Población 18-50", fmt_entero),
+    ("competidores_pond", "Competencia ponderada", fmt_dec1),
+    ("comp_per_10k_18_50", "Competencia por 10.000", fmt_dec2),
+    ("media_cluster_comp_per_10k", "Media del cluster", fmt_dec2),
+    ("socios_captables", "Socios captables", fmt_entero),
+    ("facturacion_sin_tope_capacidad", "Potencial anual sin tope", fmt_eur),
+    ("ratio_capacidad", "Ratio de capacidad", fmt_ratio),
+    ("facturacion_anual", "Facturación operativa", fmt_eur),
+    ("margen_eur", "Margen operativo", fmt_eur),
+    ("colchon_demanda_pct", "Colchón de demanda", fmt_pct_fraccion),
+    ("weighted_observed_vs_expected_pct", "Cobertura ponderada", fmt_pct),
+    ("quality_status", "Calidad del dato", fmt_texto),
+]
 
 
-def _identificadores(tabla):
-    columna = "municipality_code" if "municipality_code" in tabla else "municipality_name"
-    return set(tabla[columna].astype(str))
-
-
-def aporte_clusters(maxima_facturacion, modelo_a, evaluacion):
-    """Explica el efecto del filtro oficial de candidatos sobre el Top 5 central."""
-    codigos_maximos = _identificadores(maxima_facturacion)
-    codigos_modelo = _identificadores(modelo_a)
-    descartados = int((evaluacion["viable"] & ~evaluacion["candidate_flag"]).sum())
-    if codigos_maximos == codigos_modelo and codigos_modelo:
-        texto = (
-            "El filtro por clusters no modifica el Top 5 económico en el escenario central. "
-            "Su aportación es validar que los municipios seleccionados tienen menos "
-            "competencia relativa que la media de su grupo, no cambiar el ranking."
-        )
-    elif codigos_maximos == codigos_modelo:
-        texto = (
-            "El filtro por clusters no modifica el resultado: ninguna estrategia encuentra "
-            "municipios viables para seleccionar."
-        )
-    else:
-        referencia = maxima_facturacion.set_index("municipality_code")["municipality_name"]
-        seleccion = modelo_a.set_index("municipality_code")["municipality_name"]
-        entran = sorted(seleccion.loc[list(codigos_modelo - codigos_maximos)].tolist())
-        salen = sorted(referencia.loc[list(codigos_maximos - codigos_modelo)].tolist())
-        texto = (
-            "El filtro por clusters cambia la selección. "
-            f"Entran: {', '.join(entran) or 'ninguno'}; "
-            f"salen: {', '.join(salen) or 'ninguno'}."
-        )
-    return (
-        f"{texto} Municipios viables descartados porque candidate_flag es False: "
-        f"{descartados}."
-    )
-
-
-def aporte_diversificacion(modelo_a, diversificada):
-    codigos_modelo = _identificadores(modelo_a)
-    codigos_diversificados = _identificadores(diversificada)
-    nombres_modelo = modelo_a.set_index("municipality_code")["municipality_name"]
-    nombres_diversificados = diversificada.set_index("municipality_code")["municipality_name"]
-    entran = sorted(nombres_diversificados.loc[
-        list(codigos_diversificados - codigos_modelo)
-    ].tolist())
-    salen = sorted(nombres_modelo.loc[
-        list(codigos_modelo - codigos_diversificados)
-    ].tolist())
-    diferencia_facturacion = (
-        diversificada["facturacion_anual"].sum() - modelo_a["facturacion_anual"].sum()
-    )
-    diferencia_margen = diversificada["margen_eur"].sum() - modelo_a["margen_eur"].sum()
-    clusters_modelo = int(modelo_a["cluster"].nunique())
-    clusters_diversificada = int(diversificada["cluster"].nunique())
-    etiqueta_clusters_modelo = "cluster" if clusters_modelo == 1 else "clusters"
-    etiqueta_clusters_diversificada = "cluster" if clusters_diversificada == 1 else "clusters"
-    clusters_sin = diversificada.attrs.get("cluster_sin_candidato_viable", [])
-    texto_clusters_sin = ", ".join(map(str, clusters_sin)) or "ninguno"
-    return (
-        f"Modelo representa {clusters_modelo} {etiqueta_clusters_modelo} y la alternativa "
-        f"representa {clusters_diversificada} {etiqueta_clusters_diversificada}. "
-        f"La alternativa selecciona {len(diversificada)} municipios, con como máximo un cluster repetido. "
-        f"Entran en la alternativa: {', '.join(entran) or 'ninguno'}; "
-        f"salen: {', '.join(salen) or 'ninguno'}. Diferencia de facturación con tope: "
-        f"{formato_con_sufijo(diferencia_facturacion, 0, ' EUR')}; diferencia de margen: "
-        f"{formato_con_sufijo(diferencia_margen, 0, ' EUR')}. Clusters sin candidato viable: "
-        f"{texto_clusters_sin}. Es una opción de cartera para representar perfiles municipales, "
-        "no una obligación del challenge ni una mejora automática frente a la maximización económica."
-    )
-
-
-def resumen_perfiles_clusters(evaluacion, diversificada):
-    datos = evaluacion.copy()
-    datos["candidate_flag"] = datos["candidate_flag"].fillna(False).astype(bool)
-    datos["viable"] = datos["viable"].fillna(False).astype(bool)
-    datos["candidato_viable"] = datos["candidate_flag"] & datos["viable"]
-    perfiles = datos.groupby("cluster").agg(
-        municipios=("municipality_code", "size"),
-        poblacion=("population_18_50", "median"),
-        crecimiento=("population_growth_pct", "median"),
-        renta=("mean_net_income_per_person", "median"),
-        competencia=("comp_per_10k_18_50", "median"),
-        candidatos=("candidate_flag", "sum"),
-        candidatos_viables=("candidato_viable", "sum"),
-    )
-    elegibles = perfiles.index[perfiles["candidatos_viables"].gt(0)].tolist()
-    sin_candidato_viable = perfiles.index[
-        perfiles["candidatos_viables"].eq(0)
-    ].tolist()
+def seccion_modelo(modelo):
+    tabla, notas = tabla_desde_df(modelo, ESPEC_MODELO, quitar_constantes=True)
     lineas = [
-        "### Estado provisional y perfil de clusters", "",
-        f"**Provisional:** solo {len(elegibles)} de {len(perfiles)} clusters tienen "
-        f"candidatos que cumplen a la vez candidate_flag y viabilidad. La alternativa "
-        f"selecciona {len(diversificada)} municipios en "
-        f"{diversificada['cluster'].nunique()} clusters; no se relajan los filtros ni "
-        "se fuerzan cinco plazas.",
-        "La candidatura mide competencia inferior a la media del propio cluster; la "
-        "viabilidad es distinta y exige facturación anual con tope suficiente para "
-        "cubrir el coste del centro.",
+        "## Tabla B. Recomendación final del Modelo",
+        "",
+        "Municipios candidatos (menos competencia que la media de su cluster), "
+        "viables y que superan el control de calidad.",
+        "",
+        tabla,
     ]
-    if "socios_break_even" in datos and "umbral_facturacion" in datos:
-        socios_equilibrio = pd.to_numeric(
-            datos["socios_break_even"], errors="coerce"
-        ).dropna()
-        facturacion_equilibrio = pd.to_numeric(
-            datos["umbral_facturacion"], errors="coerce"
-        ).dropna()
-        if not socios_equilibrio.empty and not facturacion_equilibrio.empty:
-            lineas[-1] += (
-                f" En este escenario, el umbral es de unos "
-                f"{formato_numero(socios_equilibrio.iloc[0])} socios captables y "
-                f"{formato_numero(facturacion_equilibrio.iloc[0])} EUR al año."
-            )
-
-    ejemplos = []
-    for cluster in sin_candidato_viable:
-        candidatos = datos.loc[
-            datos["cluster"].eq(cluster) & datos["candidate_flag"]
-        ].sort_values("facturacion_anual", ascending=False, kind="mergesort")
-        if candidatos.empty:
-            ejemplos.append(f"cluster {cluster}: no tiene candidatos")
-            continue
-        mejor = candidatos.iloc[0]
-        ejemplos.append(
-            f"cluster {cluster}: {mejor['municipality_name']} alcanza "
-            f"{formato_numero(mejor['socios_captables'])} socios, "
-            f"{formato_numero(mejor['facturacion_anual'])} EUR de facturación y "
-            f"{formato_numero(mejor['margen_eur'])} EUR de margen"
-        )
-    if ejemplos:
-        lineas.extend([
-            "Entre los clusters sin candidatos viables, el candidato con mayor "
-            "facturación de cada uno queda así: " + "; ".join(ejemplos) + ".",
-        ])
-
-    encabezados = [
-        "Cluster", "Municipios", "Población 18-50 mediana", "Crecimiento mediano",
-        "Renta mediana (EUR)", "Competencia mediana por 10.000", "Candidatos",
-        "Candidatos viables",
-    ]
-    filas = []
-    for cluster, perfil in perfiles.iterrows():
-        filas.append([
-            formato_numero(cluster), formato_numero(perfil["municipios"]),
-            formato_numero(perfil["poblacion"]),
-            formato_con_sufijo(perfil["crecimiento"], 2, "%"),
-            formato_numero(perfil["renta"]),
-            formato_numero(perfil["competencia"], 2),
-            formato_numero(perfil["candidatos"]),
-            formato_numero(perfil["candidatos_viables"]),
-        ])
-    lineas.extend(["", tabla_markdown(encabezados, filas), "", "Lectura de perfiles:"])
-    for cluster, perfil in perfiles.iterrows():
-        rasgos = []
-        if perfil["municipios"] == perfiles["municipios"].max():
-            rasgos.append("es el grupo más numeroso")
-        poblacion = perfil["poblacion"]
-        if np.isclose(poblacion, perfiles["poblacion"].max()):
-            rasgos.append("tiene la mayor población 18-50 mediana")
-        elif np.isclose(poblacion, perfiles["poblacion"].min()):
-            rasgos.append("tiene la menor población 18-50 mediana")
-        elif poblacion < perfiles["poblacion"].median():
-            rasgos.append("tiene una población 18-50 mediana baja")
-        crecimiento = perfil["crecimiento"]
-        if np.isclose(crecimiento, perfiles["crecimiento"].max()):
-            rasgos.append("destaca por el mayor crecimiento mediano")
-        elif crecimiento < 0:
-            rasgos.append("presenta crecimiento mediano negativo")
-        elif crecimiento > 0:
-            rasgos.append("presenta crecimiento mediano positivo")
-        if np.isclose(perfil["renta"], perfiles["renta"].max()):
-            rasgos.append("tiene la mayor renta mediana")
-        elif np.isclose(perfil["renta"], perfiles["renta"].min()):
-            rasgos.append("tiene la menor renta mediana")
-        if np.isclose(perfil["competencia"], perfiles["competencia"].max()):
-            rasgos.append("registra la mayor competencia mediana")
-        viables = int(perfil["candidatos_viables"])
-        etiqueta_viables = "candidato viable" if viables == 1 else "candidatos viables"
-        rasgos.append(f"aporta {viables} {etiqueta_viables}")
-        lineas.append(f"- Cluster {formato_numero(cluster)}: " + "; ".join(rasgos) + ".")
+    if notas:
+        lineas.extend(["", "Valores comunes a todos los seleccionados:", ""])
+        lineas.extend(f"- {nota}" for nota in notas)
     return "\n".join(lineas)
 
 
-def validaciones_osm(selecciones):
-    lineas = ["La ausencia de gimnasios en OSM no demuestra que no exista competencia real."]
-    hay_avisos = False
-    for estrategia, clave in ESTRATEGIAS.items():
-        seleccion = selecciones[clave]
-        avisos = seleccion.get("aviso_calidad", pd.Series("", index=seleccion.index))
-        nombres = sorted(seleccion.loc[
-            avisos.fillna("").astype(str).str.strip().ne(""), "municipality_name"
-        ].astype(str).unique())
-        if nombres:
-            hay_avisos = True
-            lineas.append(f"- {estrategia}: {', '.join(nombres)}.")
-    if hay_avisos:
+def seccion_pendientes(pendientes):
+    especificacion = [
+        ("posicion_ranking_precalidad", "Posición económica original", fmt_entero),
+        ("municipality_name", "Municipio", fmt_texto),
+        ("cluster", "Cluster", fmt_entero),
+        ("competidores_pond", "Competencia ponderada", fmt_dec1),
+        ("expected_gyms", "Competencia esperada", fmt_dec2),
+        ("weighted_observed_vs_expected_pct", "Cobertura ponderada", fmt_pct),
+        ("facturacion_sin_tope_capacidad", "Potencial anual sin tope", fmt_eur),
+        ("motivo_calidad", "Motivo", fmt_texto),
+    ]
+    tabla, _ = tabla_desde_df(pendientes, especificacion)
+    return "\n".join([
+        "## Tabla C. Oportunidades pendientes de validación",
+        "",
+        "No se eliminan: tienen buena posición económica, pero su competencia "
+        "ponderada es inferior al 50 % de la referencia (1 equivalente de gimnasio "
+        "por cada 10.000 habitantes de 18 a 50 años). Deben validarse con una "
+        "segunda fuente antes de recomendar inversión.",
+        "",
+        tabla,
+    ])
+
+
+def seccion_sustituciones(sustituciones):
+    especificacion = [
+        ("posicion_original", "Posición original", fmt_entero),
+        ("municipality_name_descartado", "Municipio pendiente de validar", fmt_texto),
+        ("municipality_name_sustituto", "Municipio que ocupa su plaza", fmt_texto),
+    ]
+    if sustituciones is None or sustituciones.empty:
+        cuerpo = "No fue necesario sustituir municipios por calidad."
+    else:
+        cuerpo, _ = tabla_desde_df(sustituciones, especificacion)
+    return "\n".join([
+        "## Tabla D. Sustituciones por calidad",
+        "",
+        cuerpo,
+    ])
+
+
+def seccion_diversificada(diversificada, evaluacion):
+    especificacion = ESPEC_MODELO + [
+        ("motivo_seleccion", "Motivo de selección", fmt_texto),
+    ]
+    tabla, notas = tabla_desde_df(diversificada, especificacion, quitar_constantes=True)
+
+    datos = evaluacion.copy()
+    for columna in ("candidate_flag", "viable", "quality_flag"):
+        datos[columna] = datos[columna].fillna(False).astype(bool)
+    datos["candidato_viable"] = datos["candidate_flag"] & datos["viable"]
+    datos["valido"] = datos["candidato_viable"] & datos["quality_flag"]
+
+    diagnostico = datos.groupby("cluster").agg(
+        municipios=("municipality_code", "size"),
+        candidatos=("candidate_flag", "sum"),
+        viables=("viable", "sum"),
+        candidatos_viables=("candidato_viable", "sum"),
+        validos=("valido", "sum"),
+    ).reset_index()
+
+    tabla_diag, _ = tabla_desde_df(diagnostico, [
+        ("cluster", "Cluster", fmt_entero),
+        ("municipios", "Municipios", fmt_entero),
+        ("candidatos", "Candidatos", fmt_entero),
+        ("viables", "Viables", fmt_entero),
+        ("candidatos_viables", "Candidatos viables", fmt_entero),
+        ("validos", "Candidatos viables con calidad", fmt_entero),
+    ])
+
+    sin_validos = diagnostico.loc[diagnostico["validos"].eq(0), "cluster"].tolist()
+
+    lineas = [
+        "## Tabla E. Modelo diversificado por clusters",
+        "",
+        "Alternativa de cartera: intenta representar distintos perfiles municipales "
+        "sin incluir municipios no viables o con calidad insuficiente. No es una "
+        "obligación del challenge ni una mejora automática frente al Modelo.",
+        "",
+        tabla,
+    ]
+    if notas:
+        lineas.extend(["", "Valores comunes a todos los seleccionados:", ""])
+        lineas.extend(f"- {nota}" for nota in notas)
+
+    lineas.extend([
+        "",
+        "### Por qué algunos clusters no aportan municipios",
+        "",
+        tabla_diag,
+        "",
+    ])
+    if sin_validos:
         lineas.append(
-            "Los municipios señalados requieren validación con una segunda fuente antes "
-            "de recomendar una inversión."
+            "Los clusters "
+            + ", ".join(fmt_entero(c) for c in sin_validos)
+            + " no tienen ningún municipio que sea a la vez candidato, viable y con "
+            "calidad suficiente. Son municipios con poca población objetivo: aunque "
+            "tengan poca competencia, la demanda captable no alcanza el punto de "
+            "equilibrio de un centro estándar. Por eso no se fuerzan cinco plazas."
         )
     else:
-        lineas.append("Ninguna estrategia tiene municipios seleccionados con aviso OSM.")
-    return "\n".join(lineas)
-
-
-def resumen_capacidad(selecciones, capacidad):
-    lineas = []
-    for estrategia, clave in ESTRATEGIAS.items():
-        seleccion = selecciones[clave]
-        alcanzan = int(pd.to_numeric(
-            seleccion.get("socios_captables", pd.Series(dtype=float)), errors="coerce"
-        ).ge(capacidad).sum())
         lineas.append(
-            f"- {estrategia}: {alcanzan} de {len(seleccion)} alcanzan "
-            f"{formato_numero(capacidad)} socios."
+            "Todos los clusters tienen al menos un municipio candidato, viable y "
+            "con calidad suficiente."
         )
     return "\n".join(lineas)
 
 
-def crear_reporte(
+def seccion_baseline(baseline):
+    especificacion = [
+        ("municipality_name", "Municipio", fmt_texto),
+        ("cluster", "Cluster", fmt_entero),
+        ("population_18_50", "Población 18-50", fmt_entero),
+        ("competidores_pond", "Competencia ponderada", fmt_dec1),
+        ("candidate_flag", "Es candidato", fmt_bool),
+        ("viable", "Es viable", fmt_bool),
+        ("quality_flag", "Supera calidad", fmt_bool),
+        ("facturacion_anual", "Facturación operativa", fmt_eur),
+        ("facturacion_sin_tope_capacidad", "Potencial anual sin tope", fmt_eur),
+        ("margen_eur", "Margen operativo", fmt_eur),
+        ("weighted_observed_vs_expected_pct", "Cobertura ponderada", fmt_pct),
+    ]
+    tabla, _ = tabla_desde_df(baseline, especificacion)
+    return "\n".join([
+        "## Tabla F. Baseline y diagnóstico",
+        "",
+        "El baseline representa la práctica simple del cliente: abrir en los cinco "
+        "municipios con mayor población de 18 a 50 años, sin tener en cuenta "
+        "competencia, viabilidad ni calidad del dato.",
+        "",
+        tabla,
+        "",
+        "Una cobertura ponderada superior al 100 % indica que la oferta ponderada "
+        "observada supera la referencia utilizada. No demuestra por sí sola "
+        "sobresaturación ni un error del dato.",
+    ])
+
+
+def seccion_robustez(frecuencias):
+    especificacion = [
+        ("municipality_name", "Municipio", fmt_texto),
+        ("robustez", "Robustez", fmt_texto),
+        ("posicion_media", "Posición media cuando aparece", fmt_dec1),
+        ("fact_min", "Facturación mínima cuando aparece", fmt_eur),
+        ("quality_status_central", "Calidad en el escenario central", fmt_texto),
+    ]
+    total = (
+        int(frecuencias["combinaciones_totales"].max())
+        if "combinaciones_totales" in frecuencias and not frecuencias.empty
+        else 108
+    )
+    tabla, _ = tabla_desde_df(frecuencias.head(10), especificacion)
+    return "\n".join([
+        "## Tabla G. Robustez",
+        "",
+        f"La sensibilidad repite la selección del Modelo en {total} combinaciones de "
+        "supuestos: 3 niveles de penetración × 3 de cuota máxima × 3 de atractivo × "
+        "2 juegos de pesos de competencia × 2 reglas de captación. El escenario "
+        "extremo `todo_igual` queda excluido.",
+        "",
+        "- **Robustez:** número de combinaciones en las que el municipio aparece "
+        "entre los seleccionados. No es una probabilidad.",
+        "- **Posición media cuando aparece:** puesto medio ocupado solo en esas combinaciones.",
+        "- **Facturación mínima cuando aparece:** estimación más conservadora entre "
+        "las combinaciones donde sí fue seleccionado.",
+        "- **Calidad:** estado calculado con los pesos del escenario central.",
+        "",
+        tabla,
+    ])
+
+
+def seccion_conclusion(comparacion, modelo, sustituciones):
+    base = comparacion.set_index("estrategia").loc["Baseline"]
+    mod = comparacion.set_index("estrategia").loc["Modelo"]
+
+    diferencia_margen = mod["margen_operativo_total_eur"] - base["margen_operativo_total_eur"]
+    recomendados = ", ".join(modelo["municipality_name"].astype(str)) or "ninguno"
+    sustituidos = (
+        ", ".join(sustituciones["municipality_name_descartado"].astype(str))
+        if sustituciones is not None and not sustituciones.empty
+        else "ninguno"
+    )
+
+    return "\n".join([
+        "## Conclusión: por qué el Modelo mejora el baseline",
+        "",
+        f"- **Recomendación del Modelo:** {recomendados}.",
+        f"- **Viabilidad:** el Modelo selecciona {fmt_entero(mod['centros_viables'])} "
+        f"municipios viables de {fmt_entero(mod['centros_seleccionados'])}, frente a "
+        f"{fmt_entero(base['centros_viables'])} de "
+        f"{fmt_entero(base['centros_seleccionados'])} en el baseline.",
+        f"- **Margen operativo total:** {fmt_eur(mod['margen_operativo_total_eur'])} "
+        f"frente a {fmt_eur(base['margen_operativo_total_eur'])} "
+        f"(diferencia de {fmt_eur(diferencia_margen)}).",
+        f"- **Pérdidas evitadas:** el baseline acumula "
+        f"{fmt_eur(base['perdidas_operativas_totales_eur'])} de pérdidas; el Modelo, "
+        f"{fmt_eur(mod['perdidas_operativas_totales_eur'])}.",
+        f"- **Competencia:** demanda media por competidor de "
+        f"{fmt_dec1(mod['demanda_media_por_competidor'])} en el Modelo frente a "
+        f"{fmt_dec1(base['demanda_media_por_competidor'])} en el baseline.",
+        f"- **Calidad:** municipios sustituidos por calidad insuficiente: {sustituidos}.",
+        "",
+        "El baseline prioriza el tamaño del mercado. El Modelo añade competencia "
+        "relativa frente a municipios comparables, viabilidad económica y un control "
+        "mínimo de calidad del dato.",
+        "",
+        "**Nivel de confianza: medio.** Población, renta y cálculos son reproducibles, "
+        "pero la competencia procede de OpenStreetMap, con cobertura desigual. Antes de "
+        "invertir deben validarse competencia real, ubicación concreta, costes locales, "
+        "inversión inicial y ritmo de maduración del centro.",
+    ])
+
+
+def crear_tablas_definitivas_md(
     selecciones,
+    comparacion,
     evaluacion,
     frecuencias,
+    sustituciones_calidad,
     parametros_centrales,
-    detalle_sensibilidad=None,
 ):
-    """Genera el resumen ejecutivo de negocio."""
-    comparacion = crear_comparacion_estrategias(selecciones)
-    nombres_reporte = {
-        "Baseline": "Baseline",
-        "Modelo A oficial": "Modelo",
-        "Alternativa diversificada por clusters": "Alternativa diversificada por clusters",
-    }
-    comparacion = comparacion.loc[
-        comparacion["estrategia"].isin(nombres_reporte)
-    ].copy()
-    comparacion["estrategia"] = comparacion["estrategia"].replace(nombres_reporte)
-    for estrategia, clave in ESTRATEGIAS_REPORTE.items():
-        seleccion = selecciones[clave]
-        flags = seleccion.get(
-            "quality_flag", pd.Series(False, index=seleccion.index)
-        ).fillna(False).astype(bool)
-        municipios = sorted(
-            seleccion.loc[flags, "municipality_name"].astype(str).unique()
-        )
-        comparacion.loc[
-            comparacion["estrategia"].eq(estrategia), "municipios_con_aviso_osm"
-        ] = ", ".join(municipios)
-    lineas = [
-        "# Resumen de resultados de negocio", "",
-        "Escenario central: f=2,18; cuota máxima 40%; capacidad 2.600 socios; "
-        "coste anual 556.000 EUR. Las cifras son estimaciones, no ingresos observados.", "",
-        "## Comparación de estrategias", "", tabla_comparacion_estrategias(comparacion), "",
+    """Genera el único Markdown con las tablas definitivas de negocio."""
+    secciones = [
+        "# Tablas definitivas de negocio",
+        "",
+        "Escenario central. Las cifras son estimaciones, no ingresos observados.",
+        "",
+        seccion_referencia_operativa(parametros_centrales),
+        seccion_comparacion(comparacion),
+        seccion_modelo(selecciones["modelo"]),
+        seccion_pendientes(selecciones["pendientes_calidad"]),
+        seccion_sustituciones(sustituciones_calidad),
+        seccion_diversificada(selecciones["diversificada"], evaluacion),
+        seccion_baseline(selecciones["baseline"]),
+        seccion_robustez(frecuencias),
+        seccion_conclusion(comparacion, selecciones["modelo"], sustituciones_calidad),
     ]
-    estrategias_cortas = comparacion.loc[
-        comparacion["centros_seleccionados"].lt(5), "estrategia"
-    ].tolist()
-    if estrategias_cortas:
-        lineas.extend([
-            "Estrategias con menos de cinco centros: " + ", ".join(estrategias_cortas) + ". "
-            "Las diferencias de facturación y margen no representan una mejora directa "
-            "cuando cambia el número de aperturas.", "",
-        ])
-    lineas.extend([
-        "## Selecciones centrales", "",
-        "### Baseline", "", tabla_baseline(selecciones["baseline"]), "",
-        "### Modelo", "",
-        tabla_seleccion(selecciones["modelo_a"], incluir_diagnosticos=True), "",
-        "### Alternativa diversificada por clusters", "",
-        tabla_seleccion(
-            selecciones["diversificada"], incluir_diagnosticos=True, incluir_motivo=True
-        ), "",
-        "## Municipios que requieren validación de competencia", "",
-        tabla_municipios_validacion(selecciones["pendientes_calidad"]), "",
-        "## Indicadores complementarios", "",
-        "Socios captables, ratio de capacidad y potencial teórico sirven como "
-        "referencia complementaria; no son el resultado principal de la comparación.", "",
-        tabla_indicadores_complementarios(selecciones), "",
-        "### Referencia operativa", "", nota_tope_capacidad(), "",
-        "## Robustez", "",
-        "La robustez mide en cuántas de las 108 combinaciones de supuestos aparece cada "
-        "municipio entre los seleccionados. Se prueban tres niveles de penetración, tres "
-        "de cuota máxima, tres de atractivo, dos juegos de pesos de competencia y dos "
-        "reglas de captación. El escenario extremo todo_igual queda excluido. Estas "
-        "combinaciones no son probabilidades.", "",
-        "La posición media es el puesto medio ocupado solo en los escenarios en los que "
-        "el municipio fue seleccionado. La facturación mínima es la estimación más "
-        "conservadora entre esos escenarios; no incluye los escenarios en los que no fue "
-        "seleccionado. La calidad mostrada corresponde siempre al escenario central.", "",
-        tabla_robustez(frecuencias, detalle_sensibilidad), "",
-        "## Aportación del clustering", "",
-        aporte_clusters(
-            selecciones["maxima_facturacion"], selecciones["modelo_a"], evaluacion
-        ), "",
-        "## Diversificación territorial", "",
-        aporte_diversificacion(selecciones["modelo_a"], selecciones["diversificada"]), "",
-        resumen_perfiles_clusters(evaluacion, selecciones["diversificada"]), "",
-    ])
-    return "\n".join(lineas) + "\n"
+    return "\n\n".join(secciones) + "\n"
 
+
+# ============================================================
+# CARGA DE DATOS
+# ============================================================
 
 def mostrar(titulo, tabla):
-    """Imprime una tabla para la ejecución CLI."""
+    """Imprime una tabla en la terminal sin notación científica."""
     print(f"{titulo}:")
-    print(tabla.to_string(index=False))
+    with pd.option_context(
+        "display.float_format", lambda valor: formato_numero(valor, 1),
+        "display.max_columns", None,
+        "display.width", 250,
+    ):
+        print(tabla.to_string(index=False))
 
 
 def _leer_parquet(ruta: Path, prefijo_s3: str) -> pd.DataFrame:
     settings = get_storage_settings()
     if settings.save_locally and ruta.is_file():
         return pd.read_parquet(ruta)
-
     if settings.save_s3:
         uri = s3_uri_for(ruta.name, prefijo_s3)
         if uri is None:
-            raise ValueError(
-                f"S3_BUCKET es necesario para leer {ruta.name} desde S3."
-            )
+            raise ValueError(f"S3_BUCKET es necesario para leer {ruta.name} desde S3.")
         bucket, key = parse_s3_uri(uri)
         client_options = (
-            {"region_name": settings.region_name}
-            if settings.region_name
-            else {}
+            {"region_name": settings.region_name} if settings.region_name else {}
         )
         try:
             response = boto3.client("s3", **client_options).get_object(
@@ -725,14 +710,11 @@ def _leer_parquet(ruta: Path, prefijo_s3: str) -> pd.DataFrame:
         except (BotoCoreError, ClientError) as error:
             raise RuntimeError(f"No se pudo leer {uri} desde S3.") from error
         return pd.read_parquet(io.BytesIO(contents))
-
     if settings.save_locally:
         raise FileNotFoundError(
             f"No se encuentra {ruta}; ejecuta antes 02_calidad y 03_modelo."
         )
-    raise RuntimeError(
-        "No se puede cargar Gold y clusters: activa SAVE_LOCALLY o SAVE_S3."
-    )
+    raise RuntimeError("No se puede cargar Gold y clusters: activa SAVE_LOCALLY o SAVE_S3.")
 
 
 def validar_codigos(df: pd.DataFrame, fuente: str) -> None:
@@ -740,14 +722,14 @@ def validar_codigos(df: pd.DataFrame, fuente: str) -> None:
     if codes.empty:
         raise ValueError(f"{fuente}: no hay municipios para procesar.")
     if not codes.str.fullmatch(r"\d{5}").fillna(False).all():
-        raise ValueError(f"{fuente}: municipality_code debe tener cinco digitos.")
+        raise ValueError(f"{fuente}: municipality_code debe tener cinco dígitos.")
     if codes.duplicated().any():
         raise ValueError(f"{fuente}: municipality_code duplicado.")
     df["municipality_code"] = codes
 
 
 def cargar_clusters() -> pd.DataFrame:
-    """Load all cluster assignments produced for municipalities in the model."""
+    """Lee las asignaciones de cluster generadas por el modelo."""
     clusters = _leer_parquet(CLUSTER_ASSIGNMENTS_PATH, RESULTS_PREFIX)
     if not {"municipality_code", "cluster"}.issubset(clusters.columns):
         raise ValueError(
@@ -783,12 +765,17 @@ def cargar():
         raise ValueError("Gold no debe contener cluster; se lee de la salida del modelo.")
     for column in ["population_18_50", "gyms_count", "other_sports_facilities_count"]:
         values = pd.to_numeric(df[column], errors="raise")
-        if (values.isna().any() or not np.isfinite(values.astype(float)).all()
-                or values.lt(0).any() or values.mod(1).ne(0).any()):
+        if (
+            values.isna().any()
+            or not np.isfinite(values.astype(float)).all()
+            or values.lt(0).any()
+            or values.mod(1).ne(0).any()
+        ):
             raise ValueError(f"Gold: {column} debe contener enteros no negativos.")
         df[column] = values
     if df["population_18_50"].eq(0).any():
         raise ValueError("Gold: population_18_50 debe ser positiva.")
+
     clusters = cargar_clusters()
     gold_codes = set(df["municipality_code"])
     cluster_codes = set(clusters["municipality_code"])
@@ -798,15 +785,9 @@ def cargar():
             "Hay asignaciones de cluster para códigos que no existen en Gold: "
             + ", ".join(sorted(absent_from_gold))
         )
-
     gold_count = len(df)
     df = df.loc[df["municipality_code"].isin(cluster_codes)].copy()
-    df = df.merge(
-        clusters,
-        on="municipality_code",
-        how="inner",
-        validate="one_to_one",
-    )
+    df = df.merge(clusters, on="municipality_code", how="inner", validate="one_to_one")
     print(
         f"Entrada: Gold {gold_count} municipios; "
         f"{len(df)} incluidos tras filtros del modelo; clusters: sí"
@@ -814,8 +795,12 @@ def cargar():
     return df
 
 
+# ============================================================
+# VALIDACIONES
+# ============================================================
+
 def incorporar_calidad_central_en_robustez(frecuencias, evaluacion):
-    """Cruza la robustez con el estado de calidad fijo del escenario central."""
+    """Cruza la robustez con el estado de calidad del escenario central."""
     calidad = evaluacion[["municipality_code", "quality_status"]].rename(
         columns={"quality_status": "quality_status_central"}
     )
@@ -824,102 +809,78 @@ def incorporar_calidad_central_en_robustez(frecuencias, evaluacion):
     )
 
 
-def validar_resultados_centrales(evaluacion, selecciones, detalle, frecuencias, datos):
-    """Aplica invariantes económicas y de selección antes de reemplazar las salidas."""
+def validar_resultados_centrales(evaluacion, selecciones, detalle, frecuencias):
+    """Comprueba invariantes económicas y de selección antes de escribir salidas."""
     numericos = evaluacion.select_dtypes(include=[np.number]).to_numpy(dtype=float)
     if np.isinf(numericos).any():
         raise ValueError("La evaluación central contiene valores infinitos.")
-    if (evaluacion["facturacion_sin_tope_capacidad"]
-            + 1e-6 < evaluacion["facturacion_anual"]).any():
-        raise ValueError("La facturación teórica no puede ser inferior a la facturación con tope.")
+
+    if (
+        evaluacion["facturacion_sin_tope_capacidad"] + 1e-6
+        < evaluacion["facturacion_anual"]
+    ).any():
+        raise ValueError("El potencial sin tope no puede ser inferior a la facturación operativa.")
+
     bajo_capacidad = evaluacion["ratio_capacidad"].le(1)
     if not np.allclose(
         evaluacion.loc[bajo_capacidad, "facturacion_sin_tope_capacidad"],
-        evaluacion.loc[bajo_capacidad, "facturacion_anual"], rtol=1e-10, atol=1e-6,
+        evaluacion.loc[bajo_capacidad, "facturacion_anual"],
+        rtol=1e-10,
+        atol=1e-6,
     ):
-        raise ValueError("Las facturaciones deben coincidir cuando no se alcanza la capacidad.")
+        raise ValueError("Ambas facturaciones deben coincidir si no se alcanza la capacidad.")
+
     if len(selecciones["baseline"]) != 5:
-        raise ValueError("El baseline central debe seleccionar exactamente cinco municipios.")
-    if not selecciones["maxima_facturacion"]["viable"].all():
-        raise ValueError("La selección de máxima facturación solo puede incluir viables.")
-    modelo_a = selecciones["modelo_a"]
-    if not (
-        modelo_a["candidate_flag"]
-        & modelo_a["viable"]
-        & modelo_a["quality_flag"]
-    ).all():
-        raise ValueError(
-            "El Modelo solo puede incluir candidatos viables que superan calidad."
-        )
-    for clave in ("baseline", "maxima_facturacion", "modelo_a", "diversificada"):
-        seleccion = selecciones[clave]
-        if len(seleccion) > 5:
+        raise ValueError("El baseline debe seleccionar exactamente cinco municipios.")
+
+    for clave in ("baseline", "modelo", "diversificada"):
+        if len(selecciones[clave]) > 5:
             raise ValueError("Ninguna estrategia puede seleccionar más de cinco municipios.")
-    diversificada = selecciones["diversificada"]
-    if diversificada["municipality_code"].duplicated().any():
-        raise ValueError("La alternativa diversificada contiene municipios duplicados.")
-    if not (
-        diversificada["candidate_flag"]
-        & diversificada["viable"]
-        & diversificada["quality_flag"]
-    ).all():
-        raise ValueError(
-            "La alternativa diversificada exige candidato, viabilidad y calidad."
-        )
-    recuento_clusters = diversificada["cluster"].value_counts()
-    if recuento_clusters.gt(2).any() or recuento_clusters.eq(2).sum() > 1:
-        raise ValueError("La alternativa diversificada solo puede repetir un cluster una vez.")
-    if np.isinf(evaluacion["colchon_demanda_pct"].to_numpy(dtype=float)).any():
-        raise ValueError("El colchón de demanda contiene valores infinitos.")
+
+    for clave in ("modelo", "diversificada"):
+        seleccion = selecciones[clave]
+        if seleccion["municipality_code"].duplicated().any():
+            raise ValueError(f"La selección '{clave}' contiene municipios duplicados.")
+        if not (
+            seleccion["candidate_flag"]
+            & seleccion["viable"]
+            & seleccion["quality_flag"]
+        ).all():
+            raise ValueError(
+                f"La selección '{clave}' solo puede incluir candidatos viables con calidad."
+            )
+
+    recuento = selecciones["diversificada"]["cluster"].value_counts()
+    if recuento.gt(2).any() or recuento.eq(2).sum() > 1:
+        raise ValueError("El Modelo diversificado solo puede repetir un cluster una vez.")
 
     flag_esperado = (
         pd.to_numeric(evaluacion["expected_gyms"], errors="coerce").gt(0)
         & evaluacion["weighted_observed_vs_expected_pct"].ge(50)
     )
     if not evaluacion["quality_flag"].eq(flag_esperado).all():
-        raise ValueError("quality_flag no coincide con el control ponderado >= 50%.")
+        raise ValueError("quality_flag no coincide con el control ponderado >= 50 %.")
+
     if int(frecuencias["apariciones"].sum()) != len(detalle):
-        raise ValueError("La suma de apariciones de sensibilidad no coincide con las plazas elegidas.")
+        raise ValueError("La suma de apariciones no coincide con las plazas seleccionadas.")
+
+    if detalle["escenario"].astype(str).str.contains("todo_igual").any():
+        raise ValueError("La sensibilidad no debe incluir el escenario todo_igual.")
 
 
-def main():
-    datos = cargar()
-    parametros_centrales = parametros("central")
-    evaluacion = evaluar(
-        datos, escenario="central", pesos="central", regla="C", con_candidatos=True
-    )
-    (
-        modelo_final,
-        pendientes_calidad,
-        ranking_modelo_completo,
-        sustituciones_calidad,
-    ) = seleccionar_modelo_con_calidad(evaluacion, n=5)
-    diversificada = top5_diversificado_clusters(evaluacion)
-    selecciones = {
-        "baseline": top5_baseline(evaluacion),
-        "maxima_facturacion": top5_facturacion(evaluacion),
-        "modelo_a": modelo_final,
-        "diversificada": diversificada,
-        "pendientes_calidad": pendientes_calidad,
-    }
-    detalle, frecuencias = sensibilidad(datos)
-    frecuencias = incorporar_calidad_central_en_robustez(frecuencias, evaluacion)
-    validar_resultados_centrales(
-        evaluacion, selecciones, detalle, frecuencias, datos
-    )
-    comparacion = crear_comparacion_estrategias(selecciones)
-    reporte = crear_reporte(
-        selecciones,
-        evaluacion,
-        frecuencias,
-        parametros_centrales,
-        detalle_sensibilidad=detalle,
-    )
-
-    archivos = {
+def construir_archivos_salida(
+    selecciones,
+    ranking_modelo_completo,
+    sustituciones_calidad,
+    comparacion,
+    evaluacion,
+    detalle,
+    frecuencias,
+):
+    """Diccionario nombre de archivo -> tabla. Lo usan main() y el notebook 04."""
+    return {
         "baseline_central.csv": selecciones["baseline"],
-        "top_facturacion_central.csv": selecciones["maxima_facturacion"],
-        "seleccion_modelo_central.csv": selecciones["modelo_a"],
+        "seleccion_modelo_central.csv": selecciones["modelo"],
         "modelo_pendiente_validacion.csv": selecciones["pendientes_calidad"],
         "ranking_modelo_completo.csv": ranking_modelo_completo,
         "sustituciones_por_calidad.csv": sustituciones_calidad,
@@ -929,11 +890,72 @@ def main():
         "sensibilidad_detalle.csv": detalle,
         "sensibilidad_frecuencias.csv": frecuencias,
     }
-    salidas = guardar_salidas_negocio(archivos, reporte)
 
-    mostrar("Comparación de estrategias centrales", comparacion)
-    print("Informe legible:", salidas["resumen_negocio.md"])
+
+# ============================================================
+# MAIN
+# ============================================================
+
+def main():
+    datos = cargar()
+    parametros_centrales = parametros("central")
+
+    evaluacion = evaluar(
+        datos,
+        escenario="central",
+        pesos="central",
+        regla="C",
+        con_candidatos=True,
+    )
+
+    (
+        modelo,
+        pendientes_calidad,
+        ranking_modelo_completo,
+        sustituciones_calidad,
+    ) = seleccionar_modelo_con_calidad(evaluacion, n=5)
+
+    selecciones = {
+        "baseline": top5_baseline(evaluacion),
+        "modelo": modelo,
+        "diversificada": top5_diversificado_clusters(evaluacion),
+        "pendientes_calidad": pendientes_calidad,
+    }
+
+    detalle, frecuencias = sensibilidad(datos)
+    frecuencias = incorporar_calidad_central_en_robustez(frecuencias, evaluacion)
+
+    validar_resultados_centrales(evaluacion, selecciones, detalle, frecuencias)
+
+    comparacion = crear_comparacion_estrategias(selecciones)
+
+    informe = crear_tablas_definitivas_md(
+        selecciones=selecciones,
+        comparacion=comparacion,
+        evaluacion=evaluacion,
+        frecuencias=frecuencias,
+        sustituciones_calidad=sustituciones_calidad,
+        parametros_centrales=parametros_centrales,
+    )
+
+    archivos = construir_archivos_salida(
+        selecciones,
+        ranking_modelo_completo,
+        sustituciones_calidad,
+        comparacion,
+        evaluacion,
+        detalle,
+        frecuencias,
+    )
+    salidas = guardar_salidas_negocio(archivos, informe)
+    obsoletos_s3 = limpiar_salidas_obsoletas_s3()
+    if obsoletos_s3:
+        print("Salidas obsoletas eliminadas de S3:", ", ".join(obsoletos_s3))
+
+    mostrar("Comparación de estrategias", comparacion)
+    print("Tablas definitivas:", salidas[NOMBRE_INFORME])
     print("Salidas de negocio:", ", ".join(map(str, salidas.values())))
+
     return {
         "selecciones": selecciones,
         "comparacion": comparacion,
@@ -942,7 +964,7 @@ def main():
         "sustituciones_calidad": sustituciones_calidad,
         "sensibilidad_detalle": detalle,
         "sensibilidad_frecuencias": frecuencias,
-        "resumen_path": salidas["resumen_negocio.md"],
+        "tablas_definitivas_path": salidas[NOMBRE_INFORME],
     }
 
 
