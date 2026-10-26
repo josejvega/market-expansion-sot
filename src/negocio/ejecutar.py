@@ -12,6 +12,8 @@ Salida (data/outputs/, ignorado por Git):
 """
 import io
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import Union
 
 import boto3
 import numpy as np
@@ -19,7 +21,7 @@ import pandas as pd
 from botocore.exceptions import BotoCoreError, ClientError
 
 from src.common.storage import get_storage_settings, s3_uri_for
-from src.common.upload_to_s3 import parse_s3_uri
+from src.common.upload_to_s3 import parse_s3_uri, upload_files_to_s3
 from src.modelo.modelo import CLUSTER_ASSIGNMENTS_PATH, RESULTS_PREFIX
 from src.procesado.common.paths import DATA_DIR, GOLD_TABLE_PATH
 
@@ -32,6 +34,7 @@ from .valor_negocio import (
 ORO = GOLD_TABLE_PATH
 QUALITY_TABLE_PATH = DATA_DIR / "processed" / "quality" / "municipios_dudosos_gimnasios.parquet"
 SALIDA = DATA_DIR / "outputs"
+BUSINESS_RESULTS_PREFIX = "results/negocio"
 NECESARIAS = ["municipality_code", "municipality_name", "population_18_50",
               "gyms_count", "other_sports_facilities_count"]
 ESCENARIOS_ANTERIORES = ("solo_gimnasios", "central", "todo_igual")
@@ -49,6 +52,9 @@ ARCHIVOS_T5_GESTIONADOS = {
     "comparacion_variantes_central.csv",
     "seleccion_diversificada_clusters_central.csv",
     "comparacion_estrategias_central.csv",
+    "modelo_pendiente_validacion.csv",
+    "ranking_modelo_completo.csv",
+    "sustituciones_por_calidad.csv",
     "sensibilidad_detalle.csv",
     "sensibilidad_frecuencias.csv",
     "resumen_negocio.md",
@@ -89,6 +95,65 @@ def limpiar_salidas_t5(directorio=SALIDA):
             ruta.unlink()
             eliminados.append(nombre)
     return eliminados
+
+
+def guardar_salidas_negocio(
+    archivos: dict[str, pd.DataFrame],
+    reporte: str,
+    directorio: Path = SALIDA,
+) -> dict[str, Union[Path, str]]:
+    """Persist business tables and report locally, to S3, or to both."""
+    if not archivos:
+        raise ValueError("Debe proporcionarse al menos una tabla de negocio.")
+    if "resumen_negocio.md" in archivos:
+        raise ValueError("'resumen_negocio.md' está reservado para el informe.")
+    nombres = [*archivos, "resumen_negocio.md"]
+    if any(Path(nombre).name != nombre for nombre in nombres):
+        raise ValueError("Los nombres de salida deben ser nombres de archivo.")
+
+    settings = get_storage_settings()
+    if not settings.save_locally and not settings.save_s3:
+        raise RuntimeError(
+            "Las salidas de negocio requieren SAVE_LOCALLY o SAVE_S3."
+        )
+
+    def escribir_salidas(directorio_salida: Path) -> list[Path]:
+        directorio_salida.mkdir(parents=True, exist_ok=True)
+        paths = []
+        for nombre, tabla in archivos.items():
+            ruta = directorio_salida / nombre
+            tabla.to_csv(ruta, index=False, encoding="utf-8-sig")
+            paths.append(ruta)
+        ruta_reporte = directorio_salida / "resumen_negocio.md"
+        ruta_reporte.write_text(reporte, encoding="utf-8")
+        paths.append(ruta_reporte)
+        return paths
+
+    if settings.save_locally:
+        directorio = Path(directorio)
+        eliminados = limpiar_salidas_t5(directorio)
+        if eliminados:
+            print("Salidas T5 anteriores reemplazadas:", ", ".join(eliminados))
+        paths = escribir_salidas(directorio)
+    else:
+        with TemporaryDirectory(prefix="market-expansion-business-") as directory:
+            paths = escribir_salidas(Path(directory))
+            uploaded_uris = upload_files_to_s3(
+                paths,
+                prefix=BUSINESS_RESULTS_PREFIX,
+                bucket_name=settings.bucket_name,
+                region_name=settings.region_name,
+            )
+        return dict(zip(nombres, uploaded_uris))
+
+    if settings.save_s3:
+        upload_files_to_s3(
+            paths,
+            prefix=BUSINESS_RESULTS_PREFIX,
+            bucket_name=settings.bucket_name,
+            region_name=settings.region_name,
+        )
+    return {path.name: path for path in paths}
 
 
 ESTRATEGIAS = {
@@ -818,7 +883,6 @@ def validar_resultados_centrales(evaluacion, selecciones, detalle, frecuencias, 
 
 
 def main():
-    SALIDA.mkdir(parents=True, exist_ok=True)
     datos = cargar()
     parametros_centrales = parametros("central")
     evaluacion = evaluar(
@@ -852,9 +916,6 @@ def main():
         detalle_sensibilidad=detalle,
     )
 
-    eliminados = limpiar_salidas_t5()
-    if eliminados:
-        print("Salidas T5 anteriores reemplazadas:", ", ".join(eliminados))
     archivos = {
         "baseline_central.csv": selecciones["baseline"],
         "top_facturacion_central.csv": selecciones["maxima_facturacion"],
@@ -868,14 +929,11 @@ def main():
         "sensibilidad_detalle.csv": detalle,
         "sensibilidad_frecuencias.csv": frecuencias,
     }
-    for nombre, tabla in archivos.items():
-        tabla.to_csv(SALIDA / nombre, index=False, encoding="utf-8-sig")
-    ruta_reporte = SALIDA / "resumen_negocio.md"
-    ruta_reporte.write_text(reporte, encoding="utf-8")
+    salidas = guardar_salidas_negocio(archivos, reporte)
 
     mostrar("Comparación de estrategias centrales", comparacion)
-    print("Informe legible:", ruta_reporte)
-    print("CSV detallados guardados en:", SALIDA)
+    print("Informe legible:", salidas["resumen_negocio.md"])
+    print("Salidas de negocio:", ", ".join(map(str, salidas.values())))
     return {
         "selecciones": selecciones,
         "comparacion": comparacion,
@@ -884,7 +942,7 @@ def main():
         "sustituciones_calidad": sustituciones_calidad,
         "sensibilidad_detalle": detalle,
         "sensibilidad_frecuencias": frecuencias,
-        "resumen_path": ruta_reporte,
+        "resumen_path": salidas["resumen_negocio.md"],
     }
 
 
