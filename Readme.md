@@ -62,28 +62,27 @@ Esta configuración guarda las salidas en S3 y utiliza memoria y archivos tempor
 
 ### Ejecutar el flujo
 
-**Punto de entrada previsto:** [run.py](run.py) centralizará la ejecución de principio a fin: ingesta, procesamiento Silver y Gold, modelo, evaluación de negocio y arranque de Streamlit, con S3 como almacenamiento y EC2 como entorno de ejecución. **Esta automatización está en desarrollo:** la versión actual solo ejecuta ingesta y calidad. Hasta completarla, sigue la secuencia siguiente para recorrer todo el proyecto.
-
-1. **Generar Bronze, Silver y Gold.**
+**Ejecutar el análisis.** Desde la raíz del repositorio, ejecuta:
    ```bash
    python run.py
    ```
-   Ejecuta [01_ingesta](notebooks/01_ingesta.ipynb) y [02_calidad](notebooks/02_calidad.ipynb): descarga y publica Bronze, lo recupera desde S3 y genera Silver, Gold e informes de calidad en EC2. Las salidas se publican en S3. El proceso se detiene ante errores y no sobrescribe los notebooks; el límite por celda se ajusta con `--timeout SEGUNDOS`.
-2. **Seleccionar municipios candidatos.** Abre [03_modelo](notebooks/03_modelo.ipynb) y selecciona el intérprete de `.venv` como kernel. Ejecuta hasta los gráficos de inercia y silhouette, elige `N_CLUSTERS` —valor inicial: `4`— y continúa hasta la última celda para publicar los candidatos.
-3. **Evaluar el escenario de negocio.** Ejecuta completo [04_negocio](notebooks/04_negocio.ipynb) con el mismo kernel. Aplica el escenario central a los candidatos y muestra demanda, captación y facturación estimadas. Presenta los cinco con mayor facturación, sin filtrar por viabilidad. Las tablas se consultan en el notebook; no se exportan automáticamente.
-4. **Consultar el dashboard.**
+   [run.py](run.py) ejecuta secuencialmente los notebooks [01_ingesta](notebooks/01_ingesta.ipynb), [02_calidad](notebooks/02_calidad.ipynb), [03_modelo](notebooks/03_modelo.ipynb) y [04_negocio](notebooks/04_negocio.ipynb). El flujo descarga y procesa las fuentes, genera las tablas e informes de calidad, entrena el modelo y evalúa el escenario de negocio. El modelo utiliza el valor `N_CLUSTERS` definido en el notebook (actualmente `4`); la ejecución automática no se detiene para revisar los gráficos ni elegirlo. El proceso se detiene ante errores, no sobrescribe los notebooks y el límite por celda se ajusta con `--timeout SEGUNDOS`.
+
+**Ejecución manual e interactiva.** También puedes abrir los notebooks 01–04 en VS Code con la extensión Jupyter, seleccionar el entorno `.venv` como kernel y ejecutar sus celdas en orden, completando un notebook antes de pasar al siguiente. Así puedes inspeccionar durante el proceso las gráficas, tablas e informes que muestran los notebooks. En el notebook 03 puedes revisar los gráficos de inercia y silhouette, cambiar `N_CLUSTERS` si corresponde y continuar la ejecución; después, el notebook 04 presenta las tablas y resultados del escenario de negocio. La ejecución manual requiere que los artefactos y datos de entrada estén disponibles según la configuración de almacenamiento.
+
+**Consultar el dashboard.** Después de generar los datos y candidatos, ejecuta Streamlit por separado:
    ```bash
    python -m streamlit run streamlit_portable/streamlit_app.py --server.address 127.0.0.1
    ```
    Reenvía el puerto 8501 desde VS Code y abre la URL local. Verifica que se muestran los municipios y los candidatos sin avisos de archivos ausentes. Para publicar la aplicación, consulta la [guía de despliegue](streamlit_portable/README.md) y utiliza acceso restringido y un proxy HTTPS.
 
-**Estado de la implementación:** quedan pendientes en [run.py](run.py) la integración del modelo, la evaluación de negocio y el arranque de Streamlit. Actualmente, Silver y Gold se generan en el mismo notebook: Silver se publica en S3, pero Gold utiliza sus tablas en memoria, sin descargarlas de nuevo. El diagrama representa la arquitectura por capas; todavía no una ejecución completamente orquestada.
+Silver y Gold se generan en el mismo notebook: Silver se publica en S3, pero Gold utiliza sus tablas en memoria, sin descargarlas de nuevo. La ejecución de los cuatro notebooks no arranca Streamlit; la aplicación se inicia con el comando independiente indicado arriba.
 
 **Salidas en S3:** Bronze en `raw/data/` (CSV); Silver en `processed/silver/` (Parquet), con registros rechazados en `failed/`; Gold en `gold/tabla_oro_municipios_andalucia.parquet`; informes en `processed/quality/`; candidatos en `results/municipios_candidatos.parquet`. No se publican cachés ni manifiestos.
 
 **Pruebas:** ejecuta `python -m unittest discover -s tests -v` y repite con `-s streamlit_portable` para la interfaz. Complementan, pero no sustituyen, la ejecución completa.
 
-**Desarrollo local en Windows:** crea el entorno con `python -m venv .venv` y utiliza `.\.venv\Scripts\python.exe` en los comandos posteriores. Instala las mismas dependencias y copia [`.env.example`](.env.example) a `.env` si no existe. Configura `SAVE_LOCALLY=true`, `SAVE_S3=false` y deja `S3_BUCKET` vacío para evitar lecturas de S3. Sigue la misma secuencia de notebooks. Las salidas se guardan en `data`, excluido de Git; Gold en `data/processed/gold/` y candidatos en `data/results/`.
+**Desarrollo local en Windows:** crea el entorno con `python -m venv .venv` y utiliza `.\.venv\Scripts\python.exe` en los comandos posteriores. Instala las mismas dependencias y copia [`.env.example`](.env.example) a `.env` si no existe. Configura `SAVE_LOCALLY=true`, `SAVE_S3=false` y deja `S3_BUCKET` vacío para evitar lecturas de S3. Ejecuta los cuatro notebooks con `.\.venv\Scripts\python.exe run.py`; inicia el dashboard con el comando Streamlit anterior usando el mismo intérprete. Las salidas se guardan en `data`, excluido de Git; Gold en `data/processed/gold/` y candidatos en `data/results/`.
 
 ## 2. Método e interpretación
 
