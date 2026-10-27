@@ -122,3 +122,20 @@
 .method-result strong {
   color: var(--accent);
 }
+
+.intelligence-method {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  gap: 48px;
+  align-items: start;
+}
+
+.intelligence-method > section {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .intelligence-method {
+    grid-template-columns: 1fr;
+  }
+}
