@@ -393,6 +393,56 @@ class BusinessOutputsTests(unittest.TestCase):
             ],
         )
 
+    def test_accepts_legacy_comparison_csv_column_names(self) -> None:
+        with TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            self._table("04001", "Abla").to_csv(
+                output_dir / BUSINESS_OUTPUTS["selection"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+            pd.concat(
+                [
+                    self._table(f"0400{index}", f"Municipio {index}")
+                    for index in range(1, 6)
+                ],
+                ignore_index=True,
+            ).to_csv(
+                output_dir / BUSINESS_OUTPUTS["baseline"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+            comparison = self._comparison().rename(
+                columns={
+                    "facturacion_operativa_total_eur":
+                        "facturacion_anual_total_con_tope_eur",
+                    "margen_operativo_total_eur":
+                        "margen_operativo_anual_total_eur",
+                }
+            )
+            comparison.to_csv(
+                output_dir / BUSINESS_OUTPUTS["comparison"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+            self._robustness().to_csv(
+                output_dir / BUSINESS_OUTPUTS["robustness"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+
+            with patch(
+                "streamlit_data.get_storage_settings",
+                return_value=SimpleNamespace(bucket_name=None, region_name=None),
+            ):
+                tables, _ = load_business_outputs(output_dir)
+
+        self.assertIn(
+            "facturacion_operativa_total_eur",
+            tables["comparison"].columns,
+        )
+        self.assertIn("margen_operativo_total_eur", tables["comparison"].columns)
+
     def test_requires_s3_bucket_for_manual_competitor_audit(self) -> None:
         with patch(
             "streamlit_data.get_storage_settings",

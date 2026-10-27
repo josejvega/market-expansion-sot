@@ -596,6 +596,18 @@ def load_business_outputs(
         raise ValueError("La selección de negocio no puede superar cinco municipios.")
 
     comparison = tables["comparison"]
+    legacy_comparison_columns = {
+        "facturacion_anual_total_con_tope_eur": "facturacion_operativa_total_eur",
+        "margen_operativo_anual_total_eur": "margen_operativo_total_eur",
+    }
+    comparison = comparison.rename(
+        columns={
+            legacy: current
+            for legacy, current in legacy_comparison_columns.items()
+            if current not in comparison.columns and legacy in comparison.columns
+        }
+    )
+    tables["comparison"] = comparison
     missing_comparison = sorted(
         required_columns["comparison"].difference(comparison.columns)
     )
