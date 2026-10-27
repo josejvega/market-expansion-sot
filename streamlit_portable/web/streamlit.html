@@ -3,305 +3,2559 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+
   <style>
     __STYLES__
-    #market-bubbles{max-width:100%;min-width:0;overflow:hidden}.method-copy{white-space:pre-line}.range{white-space:normal}.group-label{min-width:0;overflow-wrap:anywhere}.empty{color:var(--muted);padding:16px 0}.source-links{display:flex;gap:12px;flex-wrap:wrap}#revenue-method{font-size:14px;line-height:1.6}.group{grid-template-columns:minmax(55px,1fr) minmax(40px,2fr) 65px}header{flex-wrap:wrap}h1,h2,.project,.reason{overflow-wrap:anywhere}#data-download{display:inline-flex;align-items:center;gap:6px}.stats strong{overflow-wrap:anywhere}
-    .data-warning{max-width:1540px;margin:12px auto 0;padding:12px 16px;border:1px solid #e5bf6b;border-left:4px solid #a66a00;border-radius:4px;background:#fff5d9;color:#624818;font-size:13px;line-height:1.5}.data-warning strong{font-weight:700}
-    .analysis-band{border-top:1px solid var(--line);padding:24px 0;margin-top:20px}.controls-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px 22px;margin:16px 0}.controls-grid label{display:flex;flex-direction:column;gap:8px;font-size:12px;min-width:0}.controls-grid input,.controls-grid select{font:inherit;min-width:0;width:100%;border:1px solid #c9c3cf;border-radius:4px;padding:9px;background:#fff;color:var(--ink)}.controls-grid input[type=range]{padding:0;accent-color:var(--accent);height:26px}.controls-grid label.check{flex-direction:row;align-items:center}.controls-grid input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}.control-title{display:flex;justify-content:space-between;gap:8px}.control-title output{font-variant-numeric:tabular-nums;color:var(--accent)}.scenario-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;padding:14px 0}.scenario-summary strong{font-size:23px;display:block}.scenario-summary span{font-size:12px;color:var(--muted)}.question{border-top:1px solid var(--line);padding:16px 0}.question summary{font-weight:600;cursor:pointer;line-height:1.5}.question p,.question li{font-size:12px;line-height:1.6}.section-heading .icon{display:grid;place-items:center;width:34px;height:34px;border:1px solid var(--line);border-radius:4px;background:#fff;color:var(--ink)}#spatial-map{height:390px;background:#efedf1}#spatial-empty{padding:24px 0;color:var(--muted);font-size:13px}.formula-note{font-size:13px;font-weight:500}.analysis-band input:focus-visible,.analysis-band select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}@media(max-width:850px){.controls-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:450px){.controls-grid{grid-template-columns:1fr 1fr;gap:14px 12px}.scenario-summary strong{font-size:20px}#spatial-map{height:310px}}
+
+    #market-bubbles {
+      max-width: 100%;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .method-copy {
+      white-space: pre-line;
+    }
+
+    .range {
+      white-space: normal;
+    }
+
+    .group-label {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 16px 0;
+    }
+
+    #revenue-method {
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .group {
+      grid-template-columns: minmax(55px,1fr) minmax(40px,2fr) 65px;
+    }
+
+    header {
+      flex-wrap: wrap;
+    }
+
+    h1,
+    h2,
+    .project,
+    .reason {
+      overflow-wrap: anywhere;
+    }
+
+    #data-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stats strong {
+      overflow-wrap: anywhere;
+    }
+
+    .data-warning {
+      max-width: 1540px;
+      margin: 12px auto 0;
+      padding: 12px 16px;
+      border: 1px solid #e5bf6b;
+      border-left: 4px solid #a66a00;
+      border-radius: 4px;
+      background: #fff5d9;
+      color: #624818;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .data-warning strong {
+      font-weight: 700;
+    }
+
+    .analysis-band {
+      border-top: 1px solid var(--line);
+      padding: 24px 0;
+      margin-top: 20px;
+    }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(3,minmax(0,1fr));
+      gap: 16px 22px;
+      margin: 16px 0;
+    }
+
+    .controls-grid label {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 12px;
+      min-width: 0;
+    }
+
+    .controls-grid input,
+    .controls-grid select {
+      font: inherit;
+      min-width: 0;
+      width: 100%;
+      border: 1px solid #c9c3cf;
+      border-radius: 4px;
+      padding: 9px;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .controls-grid input[type=range] {
+      padding: 0;
+      accent-color: var(--accent);
+      height: 26px;
+    }
+
+    .control-title {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .control-title output {
+      font-variant-numeric: tabular-nums;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .scenario-summary {
+      display: grid;
+      grid-template-columns: repeat(2,minmax(0,1fr));
+      gap: 24px;
+      padding: 14px 0;
+    }
+
+    .scenario-summary strong {
+      font-size: 23px;
+      display: block;
+    }
+
+    .scenario-summary span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .question {
+      border-top: 1px solid var(--line);
+      padding: 16px 0;
+    }
+
+    .question summary {
+      font-weight: 600;
+      cursor: pointer;
+      line-height: 1.5;
+    }
+
+    .question p,
+    .question li {
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .section-heading .icon {
+      display: grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    .formula-note {
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .analysis-band input:focus-visible,
+    .analysis-band select:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    @media(max-width:850px) {
+      .controls-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media(max-width:450px) {
+      .scenario-summary strong {
+        font-size: 20px;
+      }
+    }
   </style>
 </head>
+
 <body>
+
   __NOTICE__
-  <header><div class="project"><strong>Grupo 5 · Market Expansion</strong><span id="period"></span></div><a id="data-download" class="icon" download="study.json" title="Descargar datos del estudio" aria-label="Descargar datos del estudio"><i data-lucide="download"></i></a></header>
-  <div class="intro"><div class="eyebrow" id="region"></div><h1 id="title"></h1><p id="target-description"></p>
-    <nav role="tablist" aria-label="Analisis de expansion"><button id="tab-situation" role="tab" aria-controls="situation" aria-selected="false" tabindex="-1"><span>01</span>Situacion</button><button id="tab-intelligence" role="tab" aria-controls="intelligence" aria-selected="false" tabindex="-1"><span>02</span>Inteligencia</button><button id="tab-decision" role="tab" aria-controls="decision" aria-selected="true"><span>03</span>Decision</button></nav>
+
+  <header>
+    <div class="project">
+      <strong>Grupo 5 · Market Expansion</strong>
+      <span id="period"></span>
+    </div>
+
+    <a
+      id="data-download"
+      class="icon"
+      download="study.json"
+      title="Descargar datos del estudio"
+      aria-label="Descargar datos del estudio">
+      <i data-lucide="download"></i>
+    </a>
+  </header>
+
+  <div class="intro">
+    <div class="eyebrow" id="region"></div>
+    <h1 id="title"></h1>
+    <p id="target-description"></p>
+
+    <nav role="tablist" aria-label="Analisis de expansion">
+      <button
+        id="tab-situation"
+        role="tab"
+        aria-controls="situation"
+        aria-selected="false"
+        tabindex="-1">
+        <span>01</span>Situacion
+      </button>
+
+      <button
+        id="tab-intelligence"
+        role="tab"
+        aria-controls="intelligence"
+        aria-selected="false"
+        tabindex="-1">
+        <span>02</span>Inteligencia
+      </button>
+
+      <button
+        id="tab-decision"
+        role="tab"
+        aria-controls="decision"
+        aria-selected="true">
+        <span>03</span>Decision
+      </button>
+    </nav>
   </div>
+
   <main id="app">
-    <section id="decision" role="tabpanel" aria-labelledby="tab-decision">
-      <div class="stats"><div><strong id="selection-count"></strong><span>Un centro por municipio</span></div><div><strong id="total-revenue"></strong><span id="selection-revenue-label">Facturacion anual estimada · cinco centros</span></div><div><strong id="candidate-count"></strong><span>Municipios candidatos</span></div></div>
-      <div class="decision"><div class="map-shell"><h2>Seleccion frente a baseline</h2><div id="map" aria-label="Seleccion, baseline, candidatas y competencia"></div><div class="map-key"><span><i class="dot"></i>Seleccion 1-5</span><span><i class="dot baseline"></i>Baseline B1-B5</span></div></div><section><h2>Cinco ubicaciones propuestas</h2><div class="table-wrap"><table><thead><tr><th>#</th><th class="name">Municipio</th><th>Demanda /<br>competidor</th><th>Facturacion<br>anual por centro</th><th class="name">Motivo</th></tr></thead><tbody id="selected-rows"></tbody></table></div><p class="caption">Demanda por competidor: abonados potenciales. Las cifras son estimaciones, no intervalos de confianza.</p></section></div>
+
+    <!-- ==================== DECISION ==================== -->
+
+    <section
+      id="decision"
+      role="tabpanel"
+      aria-labelledby="tab-decision">
+
+      <div class="stats">
+        <div>
+          <strong id="selection-count"></strong>
+          <span>Un centro por municipio</span>
+        </div>
+
+        <div>
+          <strong id="total-revenue"></strong>
+          <span id="selection-revenue-label">
+            Facturacion anual estimada · cinco centros
+          </span>
+        </div>
+
+        <div>
+          <strong id="candidate-count"></strong>
+          <span>Municipios candidatos</span>
+        </div>
+      </div>
+
+      <div class="decision">
+
+        <div class="map-shell">
+          <h2>Seleccion frente a baseline</h2>
+
+          <div
+            id="map"
+            aria-label="Seleccion, baseline, candidatas y competencia">
+          </div>
+
+          <div class="map-key">
+            <span>
+              <i class="dot"></i>
+              Seleccion 1-5
+            </span>
+
+            <span>
+              <i class="dot baseline"></i>
+              Baseline B1-B5
+            </span>
+          </div>
+        </div>
+
+        <section>
+          <h2>Cinco ubicaciones propuestas</h2>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th class="name">Municipio</th>
+                  <th>Demanda /<br>competidor</th>
+                  <th>Facturacion<br>anual por centro</th>
+                  <th class="name">Motivo</th>
+                </tr>
+              </thead>
+
+              <tbody id="selected-rows"></tbody>
+            </table>
+          </div>
+
+          <p class="caption">
+            Demanda por competidor: abonados potenciales.
+            Las cifras son estimaciones, no intervalos de confianza.
+          </p>
+        </section>
+
+      </div>
+
       <p class="notice" id="selection-note"></p>
-      <section class="comparison"><h2>Comparacion con baseline</h2><p id="baseline-description" class="caption"></p><div class="comparison-grid"><div><div class="table-wrap"><table><thead><tr><th>Lista</th><th>Demanda /<br>competidor media</th><th>Facturacion anual<br>de cinco centros</th></tr></thead><tbody id="comparison-rows"></tbody></table></div><p class="caption" id="changes"></p></div><div><h3>Baseline</h3><div class="table-wrap"><table><thead><tr><th>Municipio</th><th>Demanda /<br>competidor</th><th>Facturacion anual<br>por centro</th></tr></thead><tbody id="baseline-rows"></tbody></table></div></div></div><p class="caption">Totales: suma de las cifras entregadas por centro. Si falta una estimacion, no se presenta un total parcial. La suma de limites no es un intervalo de confianza conjunto.</p></section>
-      <section class="analysis-band"><h2>Punto de equilibrio operativo</h2>
-        <div class="estimate-equation" role="math" aria-label="Facturación mínima anual igual a costes fijos anuales dividido entre uno menos el porcentaje de costes variables sobre ventas">
-          <span class="equation-label">Facturación mínima anual =</span>
-          <span class="fraction"><span class="numerator">Costes fijos anuales</span><span class="denominator">1 − porcentaje de costes variables sobre ventas</span></span>
+
+      <section class="comparison">
+
+        <h2>Comparacion con baseline</h2>
+
+        <p id="baseline-description" class="caption"></p>
+
+        <div class="comparison-grid">
+
+          <div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Lista</th>
+                    <th>Demanda /<br>competidor media</th>
+                    <th>Facturacion anual<br>de cinco centros</th>
+                  </tr>
+                </thead>
+
+                <tbody id="comparison-rows"></tbody>
+              </table>
+            </div>
+
+            <p class="caption" id="changes"></p>
+          </div>
+
+          <div>
+            <h3>Baseline</h3>
+
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Municipio</th>
+                    <th>Demanda /<br>competidor</th>
+                    <th>Facturacion anual<br>por centro</th>
+                  </tr>
+                </thead>
+
+                <tbody id="baseline-rows"></tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
-        <p class="caption">Abonados para cubrir costes = facturación mínima anual ÷ cuota anual por abonado.</p>
-        <div class="controls-grid"><label>Costes fijos anuales (EUR)<input id="fixed-cost" type="number" min="0" step="1000" placeholder="Sin dato"></label><label>Costes variables (% de ventas)<input id="variable-cost" type="number" min="0" max="100" step="1" placeholder="5"></label><label>Cuota anual por abonado (EUR)<input id="finance-ticket" type="number" min="0" step="0.01" placeholder="Sin dato"></label><label>Capacidad maxima (abonados)<input id="capacity" type="number" min="0" step="1" placeholder="Sin dato"></label></div>
-        <div class="scenario-summary"><div><strong id="breakeven-revenue">n/d</strong><span>Facturacion anual minima</span></div><div><strong id="breakeven-members">n/d</strong><span>Abonados para cubrir costes</span></div></div>
-        <svg id="breakeven-chart" class="breakeven-chart" role="img" aria-label="Gráfica del punto de equilibrio"></svg>
-        <p class="caption" id="profitability-answer" role="status"></p><p class="caption" id="capacity-note"></p>
+
+        <p class="caption">
+          Totales: suma de las cifras entregadas por centro.
+          Si falta una estimacion, no se presenta un total parcial.
+          La suma de limites no es un intervalo de confianza conjunto.
+        </p>
+
       </section>
-      <section class="analysis-band"><h2>Preguntas del cliente</h2>
-        <details class="question" open><summary>Cuantos de los municipios sin competencia lo estan realmente?</summary><p id="competition-answer"></p><ul id="market-checks"></ul></details>
-        <details class="question" open><summary>Que facturacion necesita un centro para ser rentable?</summary><p id="profitability-answer"></p></details>
-        <details class="question" open><summary>Por que estos cinco y no los de mas poblacion?</summary><p id="selection-answer"></p></details>
-      </section>
-    </section>
-    <section id="situation" role="tabpanel" aria-labelledby="tab-situation" hidden>
-      <div class="stats"><div><strong id="municipal-count"></strong><span>Municipios del estudio</span></div><div><strong id="target-count"></strong><span>Personas objetivo</span></div><div><strong id="competition-count"></strong><span>Competidores geolocalizados entregados</span></div></div>
-      <h2>Renta y crecimiento de cada municipio</h2>__MARKET__
-      <div class="section-heading"><h2>Mercado municipal</h2><a id="municipal-download" class="icon" download="municipalities.csv" title="Descargar tabla municipal" aria-label="Descargar tabla municipal"><i data-lucide="download"></i></a></div>
-      <div class="table-wrap municipal-scroll"><table><thead><tr><th>Municipio</th><th>Publico objetivo</th><th>Crecimiento<br>5 anos (%)</th><th>Renta neta anual<br>por persona</th><th>Competidores</th><th>Por 10.000<br>objetivo</th></tr></thead><tbody id="municipal-rows"></tbody></table></div>
-    </section>
-    <section id="intelligence" role="tabpanel" aria-labelledby="tab-intelligence" hidden>
-      <div class="intelligence"><section>
-  <h2>Método del estudio</h2>
 
-  <div class="method-step">
-    <div class="method-step-title">
-      <span class="method-number">1</span>
-      <strong>Agrupación de municipios comparables</strong>
-    </div>
+      <!-- Punto de equilibrio -->
 
-    <p>
-      Aplicamos <strong>K-means (k = 4)</strong> utilizando población objetivo,
-      renta y crecimiento poblacional.
-    </p>
+      <section class="analysis-band">
 
-    <div class="method-equations">
-      <div>x₁ = log(1 + Población<sub>18–50</sub>)</div>
-      <div>x₂ = Renta neta media por persona</div>
-      <div>x₃ = Crecimiento de la población</div>
-    </div>
+        <h2>Punto de equilibrio operativo</h2>
 
-    <p class="caption">Estandarización previa de las variables:</p>
+        <div
+          class="estimate-equation"
+          role="math"
+          aria-label="Facturación mínima anual igual a costes fijos anuales dividido entre uno menos el porcentaje de costes variables sobre ventas">
 
-    <div class="method-main-equation">
-      z = <span class="fraction">
-        <span class="numerator">x − μ</span>
-        <span class="denominator">σ</span>
-      </span>
-    </div>
-  </div>
+          <span class="equation-label">
+            Facturación mínima anual =
+          </span>
 
+          <span class="fraction">
+            <span class="numerator">
+              Costes fijos anuales
+            </span>
 
-  <div class="method-step">
-    <div class="method-step-title">
-      <span class="method-number">2</span>
-      <strong>Presión competitiva</strong>
-    </div>
+            <span class="denominator">
+              1 − porcentaje de costes variables sobre ventas
+            </span>
+          </span>
 
-    <p>Calculamos la competencia ponderada de cada municipio:</p>
-
-    <div class="method-main-equation">
-      C<sub>i</sub> =
-      Gimnasios + 0,1 × Otras instalaciones deportivas
-    </div>
-
-    <p class="caption">
-      Después la normalizamos por el tamaño del público objetivo:
-    </p>
-
-    <div class="method-main-equation">
-      D<sub>i</sub> =
-      <span class="fraction">
-        <span class="numerator">C<sub>i</sub></span>
-        <span class="denominator">
-          Población<sub>18–50,i</sub>
-        </span>
-      </span>
-      × 10.000
-    </div>
-
-    <p class="caption">
-      Competidores ponderados por cada 10.000 personas de 18–50 años.
-    </p>
-  </div>
-
-
-  <div class="method-step">
-    <div class="method-step-title">
-      <span class="method-number">3</span>
-      <strong>Identificación de oportunidades</strong>
-    </div>
-
-    <p>
-      Comparamos cada municipio con la presión competitiva media
-      de su propio cluster:
-    </p>
-
-    <div class="method-decision-equation">
-      D<sub>i</sub>
-      <span class="method-less">&lt;</span>
-      D̄<sub>cluster(i)</sub>
-    </div>
-
-    <div class="method-result">
-      Menor presión competitiva que la media del cluster
-      <strong>→ candidato potencial</strong>
-    </div>
-
-    <p class="caption">
-      Finalmente, los candidatos se filtran por viabilidad y calidad
-      del dato y se ordenan por facturación anual estimada considerando
-      la capacidad del centro.
-    </p>
-  </div>
-</section><section><h2>Oferta por grupo</h2><p class="caption">Competidores por 10.000 personas objetivo · media de los municipios con datos</p><div id="groups"></div><p class="caption" id="group-note"></p></section></div>
-      <section class="estimate" aria-labelledby="estimate-heading">
-        <h2 id="estimate-heading">Como se estima la facturacion</h2>
-        <p id="revenue-method" class="method-copy"></p>
-        <ol id="business-formulas" class="business-formulas"></ol>
-        <h3>Supuestos del escenario central</h3><ul id="assumptions"></ul>
-      </section>
-      <section id="business-summary" class="analysis-band" hidden>
-        <h2>KPI y estabilidad de la recomendacion</h2>
-        <p class="caption">Comparacion publicada por el analisis de negocio. Cifras estimadas; no son resultados observados.</p>
-        <div class="table-wrap"><table><thead><tr><th>Estrategia</th><th>Centros viables</th><th>Facturacion operativa anual total</th><th>Margen operativo anual total</th><th>Perdidas operativas</th><th>Demanda media / competidor</th></tr></thead><tbody id="business-kpi-rows"></tbody></table></div>
-        <h3>Robustez de los municipios seleccionados</h3>
-        <p class="caption">Apariciones en combinaciones de sensibilidad. Son escenarios, no una probabilidad de exito.</p>
-        <div class="table-wrap"><table><thead><tr><th>Municipio</th><th>Apariciones</th><th>Posicion media</th><th>Facturacion minima al aparecer</th></tr></thead><tbody id="business-robustness-rows"></tbody></table></div>
-      </section>
-      <section class="analysis-band"><div class="section-heading"><h2>Simulador de escenarios</h2><button class="icon" id="reset-scenario" title="Restaurar parametros" aria-label="Restaurar parametros"><i data-lucide="rotate-ccw"></i></button></div>
-        <p id="simulation-empty" class="caption">Configuracion de simulacion no aportada en esta entrega.</p>
-        <div id="simulation-controls" hidden><div class="controls-grid">
-          <label><span class="control-title">Tamano del publico<output id="target-scale-value"></output></span><input id="target-scale" type="range" min="25" max="200" step="5" value="100"></label>
-          <label>Penetracion (%)<input id="penetration" type="number" min="0" max="100" step="0.5"></label>
-          <label>Cuota anual (EUR)<input id="scenario-ticket" type="number" min="0" step="0.01"></label>
-          <label><span class="control-title">Peso: demanda<output id="weight-demand-value"></output></span><input id="weight-demand" type="range" min="0" max="100" step="1"></label>
-          <label><span class="control-title">Peso: renta<output id="weight-income-value"></output></span><input id="weight-income" type="range" min="0" max="100" step="1"></label>
-          <label><span class="control-title">Peso: crecimiento<output id="weight-growth-value"></output></span><input id="weight-growth" type="range" min="0" max="100" step="1"></label>
-        </div><p class="caption">Escenario independiente: score ponderado min-max entre municipios con datos; solo candidatas del estudio. No vuelve a entrenar k-means ni cambia la seleccion original. Facturacion de escenario = publico x penetracion x cuota / (competidores + 1).</p>
-          <div class="scenario-summary"><div><strong id="scenario-total">n/d</strong><span>Escenario anual · cinco candidatas</span></div><div><strong id="scenario-baseline">n/d</strong><span>Escenario anual · cinco con mas publico</span></div></div>
-          <p class="caption" id="scenario-message" role="status"></p><div class="table-wrap"><table><thead><tr><th>#</th><th class="name">Municipio</th><th>Score de escenario</th><th>Abonados / centro</th><th>Facturacion anual</th></tr></thead><tbody id="scenario-rows"></tbody></table></div><p class="caption" id="scenario-baseline-names"></p>
         </div>
+
+        <p class="caption">
+          Abonados para cubrir costes =
+          facturación mínima anual ÷ cuota anual por abonado.
+        </p>
+
+        <div class="controls-grid">
+
+          <label>
+            Costes fijos anuales (EUR)
+            <input
+              id="fixed-cost"
+              type="number"
+              min="0"
+              step="1000"
+              placeholder="Sin dato">
+          </label>
+
+          <label>
+            Costes variables (% de ventas)
+            <input
+              id="variable-cost"
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              placeholder="5">
+          </label>
+
+          <label>
+            Cuota anual por abonado (EUR)
+            <input
+              id="finance-ticket"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Sin dato">
+          </label>
+
+          <label>
+            Capacidad maxima (abonados)
+            <input
+              id="capacity"
+              type="number"
+              min="0"
+              step="1"
+              placeholder="Sin dato">
+          </label>
+
+        </div>
+
+        <div class="scenario-summary">
+
+          <div>
+            <strong id="breakeven-revenue">n/d</strong>
+            <span>Facturacion anual minima</span>
+          </div>
+
+          <div>
+            <strong id="breakeven-members">n/d</strong>
+            <span>Abonados para cubrir costes</span>
+          </div>
+
+        </div>
+
+        <svg
+          id="breakeven-chart"
+          class="breakeven-chart"
+          role="img"
+          aria-label="Gráfica del punto de equilibrio">
+        </svg>
+
+        <p
+          class="caption"
+          id="profitability-answer"
+          role="status">
+        </p>
+
+        <p
+          class="caption"
+          id="capacity-note">
+        </p>
+
       </section>
-      <section class="audit"><div class="section-heading"><h2>Control de la competencia</h2><a id="audit-download" class="icon" download="audit.csv" title="Descargar auditoria" aria-label="Descargar auditoria"><i data-lucide="download"></i></a></div><p id="audit-summary"></p><div class="table-wrap audit-list"><table><thead><tr><th>Competidor</th><th>Municipio</th><th>Revision</th><th>Evidencia</th></tr></thead><tbody id="audit-rows"></tbody></table></div></section>
-      <h3>Limitaciones</h3><ul id="limitations"></ul>
+
+      <!-- Preguntas -->
+
+      <section class="analysis-band">
+
+        <h2>Preguntas del cliente</h2>
+
+        <details class="question" open>
+          <summary>
+            Cuantos de los municipios sin competencia lo estan realmente?
+          </summary>
+
+          <p id="competition-answer"></p>
+          <ul id="market-checks"></ul>
+        </details>
+
+        <details class="question" open>
+          <summary>
+            Que facturacion necesita un centro para ser rentable?
+          </summary>
+
+          <p id="profitability-answer"></p>
+        </details>
+
+        <details class="question" open>
+          <summary>
+            Por que estos cinco y no los de mas poblacion?
+          </summary>
+
+          <p id="selection-answer"></p>
+        </details>
+
+      </section>
+
     </section>
+
+
+    <!-- ==================== SITUACION ==================== -->
+
+    <section
+      id="situation"
+      role="tabpanel"
+      aria-labelledby="tab-situation"
+      hidden>
+
+      <div class="stats">
+
+        <div>
+          <strong id="municipal-count"></strong>
+          <span>Municipios del estudio</span>
+        </div>
+
+        <div>
+          <strong id="target-count"></strong>
+          <span>Personas objetivo</span>
+        </div>
+
+        <div>
+          <strong id="competition-count"></strong>
+          <span>Competidores geolocalizados entregados</span>
+        </div>
+
+      </div>
+
+      <h2>Renta y crecimiento de cada municipio</h2>
+
+      __MARKET__
+
+      <div class="section-heading">
+
+        <h2>Mercado municipal</h2>
+
+        <a
+          id="municipal-download"
+          class="icon"
+          download="municipalities.csv"
+          title="Descargar tabla municipal"
+          aria-label="Descargar tabla municipal">
+          <i data-lucide="download"></i>
+        </a>
+
+      </div>
+
+      <div class="table-wrap municipal-scroll">
+
+        <table>
+          <thead>
+            <tr>
+              <th>Municipio</th>
+              <th>Publico objetivo</th>
+              <th>Crecimiento<br>5 anos (%)</th>
+              <th>Renta neta anual<br>por persona</th>
+              <th>Competidores</th>
+              <th>Por 10.000<br>objetivo</th>
+            </tr>
+          </thead>
+
+          <tbody id="municipal-rows"></tbody>
+        </table>
+
+      </div>
+
+    </section>
+
+
+    <!-- ==================== INTELIGENCIA ==================== -->
+
+    <section
+      id="intelligence"
+      role="tabpanel"
+      aria-labelledby="tab-intelligence"
+      hidden>
+
+      <div class="intelligence">
+
+        <!-- METODO -->
+
+        <section>
+
+          <h2>Método del estudio</h2>
+
+          <div class="method-step">
+
+            <div class="method-step-title">
+              <span class="method-number">1</span>
+              <strong>
+                Agrupación de municipios comparables
+              </strong>
+            </div>
+
+            <p>
+              Aplicamos <strong>K-means (k = 4)</strong>
+              utilizando población objetivo, renta y crecimiento
+              poblacional.
+            </p>
+
+            <div class="method-equations">
+              <div>
+                x₁ = log(1 + Población<sub>18–50</sub>)
+              </div>
+
+              <div>
+                x₂ = Renta neta media por persona
+              </div>
+
+              <div>
+                x₃ = Crecimiento de la población
+              </div>
+            </div>
+
+            <p class="caption">
+              Estandarización previa de las variables:
+            </p>
+
+            <div class="method-main-equation">
+              z =
+              <span class="fraction">
+                <span class="numerator">x − μ</span>
+                <span class="denominator">σ</span>
+              </span>
+            </div>
+
+          </div>
+
+
+          <div class="method-step">
+
+            <div class="method-step-title">
+              <span class="method-number">2</span>
+              <strong>Presión competitiva</strong>
+            </div>
+
+            <p>
+              Calculamos la competencia ponderada de cada municipio:
+            </p>
+
+            <div class="method-main-equation">
+              C<sub>i</sub> =
+              Gimnasios + 0,1 × Otras instalaciones deportivas
+            </div>
+
+            <p class="caption">
+              Después la normalizamos por el tamaño del público objetivo:
+            </p>
+
+            <div class="method-main-equation">
+
+              D<sub>i</sub> =
+
+              <span class="fraction">
+
+                <span class="numerator">
+                  C<sub>i</sub>
+                </span>
+
+                <span class="denominator">
+                  Población<sub>18–50,i</sub>
+                </span>
+
+              </span>
+
+              × 10.000
+
+            </div>
+
+            <p class="caption">
+              Competidores ponderados por cada 10.000 personas
+              de 18–50 años.
+            </p>
+
+          </div>
+
+
+          <div class="method-step">
+
+            <div class="method-step-title">
+              <span class="method-number">3</span>
+              <strong>Identificación de oportunidades</strong>
+            </div>
+
+            <p>
+              Comparamos cada municipio con la presión competitiva
+              media de su propio cluster:
+            </p>
+
+            <div class="method-decision-equation">
+              D<sub>i</sub>
+              <span class="method-less">&lt;</span>
+              D̄<sub>cluster(i)</sub>
+            </div>
+
+            <div class="method-result">
+              Menor presión competitiva que la media del cluster
+              <strong>→ candidato potencial</strong>
+            </div>
+
+            <p class="caption">
+              Finalmente, los candidatos se filtran por viabilidad
+              y calidad del dato y se ordenan por facturación anual
+              estimada considerando la capacidad del centro.
+            </p>
+
+          </div>
+
+        </section>
+
+
+        <!-- OFERTA POR GRUPO -->
+
+        <section>
+
+          <h2>Oferta por grupo</h2>
+
+          <p class="caption">
+            Competidores por 10.000 personas objetivo ·
+            media de los municipios con datos
+          </p>
+
+          <div id="groups"></div>
+
+          <p
+            class="caption"
+            id="group-note">
+          </p>
+
+        </section>
+
+      </div>
+
+
+      <!-- FACTURACION -->
+
+      <section
+        class="estimate"
+        aria-labelledby="estimate-heading">
+
+        <h2 id="estimate-heading">
+          Como se estima la facturacion
+        </h2>
+
+        <p
+          id="revenue-method"
+          class="method-copy">
+        </p>
+
+        <ol
+          id="business-formulas"
+          class="business-formulas">
+        </ol>
+
+        <h3>Supuestos del escenario central</h3>
+
+        <ul id="assumptions"></ul>
+
+      </section>
+
+
+      <!-- KPIs -->
+
+      <section
+        id="business-summary"
+        class="analysis-band"
+        hidden>
+
+        <h2>
+          KPI y estabilidad de la recomendacion
+        </h2>
+
+        <p class="caption">
+          Comparacion publicada por el analisis de negocio.
+          Cifras estimadas; no son resultados observados.
+        </p>
+
+        <div class="table-wrap">
+
+          <table>
+
+            <thead>
+              <tr>
+                <th>Estrategia</th>
+                <th>Centros viables</th>
+                <th>Facturacion operativa anual total</th>
+                <th>Margen operativo anual total</th>
+                <th>Perdidas operativas</th>
+                <th>Demanda media / competidor</th>
+              </tr>
+            </thead>
+
+            <tbody id="business-kpi-rows"></tbody>
+
+          </table>
+
+        </div>
+
+
+        <h3>
+          Robustez de los municipios seleccionados
+        </h3>
+
+        <p class="caption">
+          Estabilidad de la recomendación ante cambios en los
+          supuestos del modelo. Se muestra en cuántos de los
+          108 escenarios cada municipio permanece entre los
+          seleccionados. No representa una probabilidad de éxito.
+        </p>
+
+        <div class="table-wrap">
+
+          <table>
+
+            <thead>
+              <tr>
+                <th>Municipio</th>
+                <th>Selección en escenarios</th>
+                <th>Posicion media</th>
+                <th>Facturacion minima al aparecer</th>
+              </tr>
+            </thead>
+
+            <tbody id="business-robustness-rows"></tbody>
+
+          </table>
+
+        </div>
+
+      </section>
+
+
+      <!-- ========== NUEVO SIMULADOR K-MEANS ========== -->
+
+      <section class="analysis-band">
+
+        <div class="section-heading">
+
+          <h2>
+            Simulador de sensibilidad del modelo
+          </h2>
+
+          <button
+            class="icon"
+            id="reset-scenario"
+            type="button"
+            title="Restaurar pesos 1:1:1"
+            aria-label="Restaurar pesos 1:1:1">
+            <i data-lucide="rotate-ccw"></i>
+          </button>
+
+        </div>
+
+        <p
+          id="simulation-empty"
+          class="caption">
+          Configuración de simulación no disponible.
+        </p>
+
+        <div
+          id="simulation-controls"
+          hidden>
+
+          <p class="caption">
+            Modifica la importancia relativa de las tres variables
+            utilizadas en el clustering. El escenario central utiliza
+            pesos <strong>1 : 1 : 1</strong>.
+          </p>
+
+          <div class="controls-grid">
+
+            <label>
+
+              <span class="control-title">
+                Peso: población objetivo
+                <output id="weight-demand-value">
+                  1,0
+                </output>
+              </span>
+
+              <input
+                id="weight-demand"
+                type="range"
+                min="0"
+                max="3"
+                step="0.1"
+                value="1">
+
+            </label>
+
+
+            <label>
+
+              <span class="control-title">
+                Peso: renta
+                <output id="weight-income-value">
+                  1,0
+                </output>
+              </span>
+
+              <input
+                id="weight-income"
+                type="range"
+                min="0"
+                max="3"
+                step="0.1"
+                value="1">
+
+            </label>
+
+
+            <label>
+
+              <span class="control-title">
+                Peso: crecimiento
+                <output id="weight-growth-value">
+                  1,0
+                </output>
+              </span>
+
+              <input
+                id="weight-growth"
+                type="range"
+                min="0"
+                max="3"
+                step="0.1"
+                value="1">
+
+            </label>
+
+          </div>
+
+
+          <div
+            class="method-main-equation"
+            role="math"
+            aria-label="Distancia cuadrática ponderada">
+
+            d² =
+
+            w<sub>p</sub> ·
+            (Δz<sub>p</sub>)²
+
+            +
+
+            w<sub>r</sub> ·
+            (Δz<sub>r</sub>)²
+
+            +
+
+            w<sub>c</sub> ·
+            (Δz<sub>c</sub>)²
+
+          </div>
+
+
+          <p class="caption">
+            Al cambiar los pesos se vuelve a ejecutar K-means con
+            k = 4 sobre población objetivo, renta y crecimiento
+            estandarizados. Después se compara la presión competitiva
+            de cada municipio con la media de su nuevo cluster para
+            identificar candidatos. La simulación no modifica la
+            recomendación oficial publicada.
+          </p>
+
+
+          <div class="scenario-summary">
+
+            <div>
+              <strong id="scenario-candidate-count">
+                n/d
+              </strong>
+
+              <span>
+                Candidatos en el escenario
+              </span>
+            </div>
+
+            <div>
+              <strong id="scenario-total">
+                n/d
+              </strong>
+
+              <span>
+                Facturación estimada · Top 5 del escenario
+              </span>
+            </div>
+
+          </div>
+
+
+          <p
+            class="caption"
+            id="scenario-message"
+            role="status">
+          </p>
+
+
+          <div class="table-wrap">
+
+            <table>
+
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th class="name">Municipio</th>
+                  <th>Cluster</th>
+                  <th>Presión competitiva</th>
+                  <th>Media del cluster</th>
+                  <th>Facturación anual</th>
+                </tr>
+              </thead>
+
+              <tbody id="scenario-rows"></tbody>
+
+            </table>
+
+          </div>
+
+        </div>
+
+      </section>
+
+
+      <!-- CONTROL COMPETENCIA -->
+
+      <section class="audit">
+
+        <div class="section-heading">
+
+          <h2>Control de la competencia</h2>
+
+          <a
+            id="audit-download"
+            class="icon"
+            download="audit.csv"
+            title="Descargar auditoria"
+            aria-label="Descargar auditoria">
+            <i data-lucide="download"></i>
+          </a>
+
+        </div>
+
+        <p id="audit-summary"></p>
+
+        <div class="table-wrap audit-list">
+
+          <table>
+
+            <thead>
+              <tr>
+                <th>Competidor</th>
+                <th>Municipio</th>
+                <th>Revision</th>
+                <th>Evidencia</th>
+              </tr>
+            </thead>
+
+            <tbody id="audit-rows"></tbody>
+
+          </table>
+
+        </div>
+
+      </section>
+
+      <h3>Limitaciones</h3>
+
+      <ul id="limitations"></ul>
+
+    </section>
+
   </main>
-  <footer><div id="sources" class="source-links"></div><span>Grupo 5 · Market Expansion</span></footer>
+
+
+  <!-- Hemos quitado las rutas técnicas de fuentes -->
+  <footer>
+    <span>Grupo 5 · Market Expansion</span>
+  </footer>
+
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <script type="application/json" id="study-data">__DATA__</script>
+
+  <script
+    type="application/json"
+    id="study-data">__DATA__</script>
+
+
   <script>
-    const DATA=JSON.parse(document.getElementById('study-data').textContent);
-    const el=id=>document.getElementById(id);
-    const fmt=(value,digits=0)=>typeof value!=='number'||!Number.isFinite(value)?'n/d':new Intl.NumberFormat('es-ES',{maximumFractionDigits:digits}).format(value);
-    const money=value=>value==null?'n/d':fmt(value)+' EUR';
-    const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
-    const rows=DATA.municipalities,meta=DATA.metadata,byId=new Map(rows.map(row=>[row.id,row]));
-    const selected=DATA.selection.map(id=>byId.get(id)),baseline=DATA.baseline.map(id=>byId.get(id));
-    const sumField=(listing,field)=>!listing.length||listing.some(row=>row[field]==null)?null:listing.reduce((total,row)=>total+row[field],0);
-    const rate=row=>row.target_population>0&&row.competitor_count!=null?row.competitor_count/row.target_population*10000:null;
-    const revenue=row=>money(row.annual_revenue_eur)+(row.revenue_low_eur==null?'':`<small class="range">${money(row.revenue_low_eur)} - ${money(row.revenue_high_eur)}</small>`);
-    const listItems=(id,items,empty)=>{el(id).replaceChildren();for(const item of items.length?items:[empty]){const node=document.createElement('li');node.textContent=item;el(id).append(node);}};
-    const safeLink=(label,url)=>url?`<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`:escapeHtml(label);
-    const tabs=[...document.querySelectorAll('[role=tab]')];
-    function resizeViews(){if(window.scopeStudy&&!el('decision').hidden)window.scopeStudy.map.invalidateSize({animate:false,pan:false});if(window.expansionMap&&!el('situation').hidden){window.expansionMap.invalidateSize({animate:false,pan:false});window.refreshSpatial();}const chart=el('market-bubbles');if(window.Plotly&&!el('situation').hidden&&chart?.clientWidth)Plotly.relayout(chart,{width:chart.clientWidth,height:390});}
-    function showTab(tab){for(const item of tabs){const active=item===tab;item.setAttribute('aria-selected',String(active));item.tabIndex=active?0:-1;el(item.getAttribute('aria-controls')).hidden=!active;}resizeViews();}
-    tabs.forEach((tab,index)=>{tab.addEventListener('click',()=>showTab(tab));tab.addEventListener('keydown',event=>{const next=event.key==='ArrowRight'?tabs[(index+1)%tabs.length]:event.key==='ArrowLeft'?tabs[(index+tabs.length-1)%tabs.length]:event.key==='Home'?tabs[0]:event.key==='End'?tabs[tabs.length-1]:null;if(next){event.preventDefault();showTab(next);next.focus();}});});
-    window.addEventListener('resize',resizeViews);
-    document.title=meta.title;el('title').textContent=meta.title;el('region').textContent=meta.region+' / Gimnasios low-cost';el('period').textContent=meta.period;el('target-description').textContent=meta.target_description;
-    el('baseline-description').textContent=meta.baseline_description;
-el('revenue-method').textContent=meta.revenue_method;
-    el('business-formulas').replaceChildren(...(meta.business_formulas||[]).map(item=>{const row=document.createElement('li'),heading=document.createElement('strong'),equation=document.createElement('code'),detail=document.createElement('span');heading.textContent=item.label;equation.textContent=item.expression;detail.textContent=item.detail;row.append(heading,equation,detail);return row;}));
-    if(meta.business_kpis?.length){
-      el('business-summary').hidden=false;
-      el('business-kpi-rows').innerHTML=meta.business_kpis.map(row=>`<tr><td>${escapeHtml(row.strategy)}</td><td>${fmt(row.viable)} / ${fmt(row.selected)}</td><td>${money(row.revenue_eur)}</td><td>${money(row.margin_eur)}</td><td>${money(row.losses_eur)}</td><td>${fmt(row.demand_per_competitor,1)}</td></tr>`).join('');
-      el('business-robustness-rows').innerHTML=meta.business_robustness?.length?meta.business_robustness.map(row=>`<tr><td>${escapeHtml(row.name)}</td><td>${fmt(row.appearances)} / ${fmt(row.total_scenarios)}</td><td>${fmt(row.average_position,1)}</td><td>${money(row.minimum_revenue_eur)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No hay resultados de sensibilidad para estos municipios.</td></tr>';
+
+    const DATA =
+      JSON.parse(
+        document.getElementById('study-data').textContent
+      );
+
+    const el =
+      id => document.getElementById(id);
+
+    const fmt =
+      (value, digits = 0) =>
+        typeof value !== 'number' ||
+        !Number.isFinite(value)
+          ? 'n/d'
+          : new Intl.NumberFormat(
+              'es-ES',
+              {maximumFractionDigits: digits}
+            ).format(value);
+
+    const money =
+      value =>
+        value == null
+          ? 'n/d'
+          : fmt(value) + ' EUR';
+
+    const escapeHtml =
+      value =>
+        String(value ?? '')
+          .replace(
+            /[&<>"']/g,
+            character => ({
+              '&': '&amp;',
+              '<': '&lt;',
+              '>': '&gt;',
+              '"': '&quot;',
+              "'": '&#39;'
+            })[character]
+          );
+
+    const rows = DATA.municipalities;
+    const meta = DATA.metadata;
+
+    const byId =
+      new Map(
+        rows.map(row => [row.id, row])
+      );
+
+    const selected =
+      DATA.selection
+        .map(id => byId.get(id))
+        .filter(Boolean);
+
+    const baseline =
+      DATA.baseline
+        .map(id => byId.get(id))
+        .filter(Boolean);
+
+    const sumField =
+      (listing, field) =>
+        !listing.length ||
+        listing.some(row => row[field] == null)
+          ? null
+          : listing.reduce(
+              (total, row) =>
+                total + row[field],
+              0
+            );
+
+    const rate =
+      row =>
+        row.target_population > 0 &&
+        row.competitor_count != null
+          ? (
+              row.competitor_count /
+              row.target_population *
+              10000
+            )
+          : null;
+
+    const revenue =
+      row =>
+        money(row.annual_revenue_eur) +
+        (
+          row.revenue_low_eur == null
+            ? ''
+            : `<small class="range">${money(row.revenue_low_eur)} - ${money(row.revenue_high_eur)}</small>`
+        );
+
+    const listItems =
+      (id, items, empty) => {
+
+        el(id).replaceChildren();
+
+        for (const item of items.length ? items : [empty]) {
+          const node =
+            document.createElement('li');
+
+          node.textContent = item;
+
+          el(id).append(node);
+        }
+      };
+
+    const safeLink =
+      (label, url) =>
+        url
+          ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`
+          : escapeHtml(label);
+
+
+    /* ==================== TABS ==================== */
+
+    const tabs =
+      [...document.querySelectorAll('[role=tab]')];
+
+    function resizeViews() {
+
+      if (
+        window.scopeStudy &&
+        !el('decision').hidden
+      ) {
+        window.scopeStudy.map.invalidateSize({
+          animate: false,
+          pan: false
+        });
+      }
+
+      const chart =
+        el('market-bubbles');
+
+      if (
+        window.Plotly &&
+        !el('situation').hidden &&
+        chart?.clientWidth
+      ) {
+        Plotly.relayout(
+          chart,
+          {
+            width: chart.clientWidth,
+            height: 390
+          }
+        );
+      }
     }
-    listItems('assumptions',meta.assumptions,'Sin supuestos documentados.');listItems('limitations',meta.limitations,'Sin limitaciones documentadas.');
 
-    el('selection-count').textContent=`${selected.length} municipios`;el('selection-revenue-label').textContent=`Facturacion anual estimada · ${selected.length} centros`;el('total-revenue').textContent=money(sumField(selected,'annual_revenue_eur'));el('candidate-count').textContent=fmt(rows.filter(row=>row.candidate).length);
-    el('municipal-count').textContent=fmt(rows.length);el('target-count').textContent=fmt(sumField(rows,'target_population'));el('competition-count').textContent=fmt(DATA.competitors.length);
-    el('selected-rows').innerHTML=selected.map((row,index)=>`<tr><td>${index+1}</td><td class="name"><button class="place" data-id="${escapeHtml(row.id)}">${escapeHtml(row.name)}</button><small>${escapeHtml(row.province)}</small></td><td>${fmt(row.demand_per_competitor)}</td><td class="money">${revenue(row)}</td><td class="reason">${escapeHtml(row.reason)}</td></tr>`).join('');
-    el('baseline-rows').innerHTML=baseline.map((row,index)=>`<tr><td><button class="place" data-id="${escapeHtml(row.id)}">B${index+1} · ${escapeHtml(row.name)}</button></td><td>${fmt(row.demand_per_competitor)}</td><td class="money">${revenue(row)}</td></tr>`).join('');
-    el('comparison-rows').innerHTML=[['Seleccion',selected],['Baseline',baseline]].map(([label,listing])=>{const valid=listing.filter(row=>row.demand_per_competitor!=null);const mean=valid.length?valid.reduce((total,row)=>total+row.demand_per_competitor,0)/valid.length:null;const total={annual_revenue_eur:sumField(listing,'annual_revenue_eur'),revenue_low_eur:sumField(listing,'revenue_low_eur'),revenue_high_eur:sumField(listing,'revenue_high_eur')};return `<tr><td>${label}</td><td>${fmt(mean)}<small>${valid.length}/${listing.length} calculables</small></td><td class="money">${revenue(total)}</td></tr>`;}).join('');
-    const entrants=selected.filter(row=>!DATA.baseline.includes(row.id)),exits=baseline.filter(row=>!DATA.selection.includes(row.id));
-    el('changes').textContent='Entran: '+(entrants.map(row=>row.name).join(', ')||'ninguno')+'. Salen: '+(exits.map(row=>row.name).join(', ')||'ninguno')+'.';
-    el('selection-note').textContent='Estimaciones del estudio; no equivalen a ventas garantizadas ni a beneficio.';
-    el('municipal-rows').innerHTML=[...rows].sort((left,right)=>left.name.localeCompare(right.name,'es')).map(row=>`<tr><td>${escapeHtml(row.name)}<small>${escapeHtml(row.province)}</small></td><td>${fmt(row.target_population)}</td><td>${fmt(row.growth_pct,1)}</td><td>${money(row.income_eur)}</td><td>${fmt(row.competitor_count)}<small>${escapeHtml(row.coverage_note)}</small></td><td>${fmt(rate(row),2)}</td></tr>`).join('');
-const assignedRows = rows.filter(
-    row =>
-        row.cluster !== 'Asignación no publicada' &&
-        row.cluster !== null &&
-        row.cluster !== undefined &&
-        row.cluster !== ''
-);
+    function showTab(tab) {
 
-const grouped = new Map();
+      for (const item of tabs) {
 
-for (const row of assignedRows) {
-    if (!grouped.has(row.cluster)) {
-        grouped.set(row.cluster, []);
+        const active =
+          item === tab;
+
+        item.setAttribute(
+          'aria-selected',
+          String(active)
+        );
+
+        item.tabIndex =
+          active ? 0 : -1;
+
+        el(
+          item.getAttribute('aria-controls')
+        ).hidden = !active;
+      }
+
+      resizeViews();
     }
 
-    grouped.get(row.cluster).push(row);
-}
+    tabs.forEach(
+      (tab, index) => {
 
-const groups = [...grouped]
-    .map(([name, members]) => {
-        const values = members
-            .map(rate)
-            .filter(value => value != null);
+        tab.addEventListener(
+          'click',
+          () => showTab(tab)
+        );
 
-        return {
-            name,
-            count: members.length,
-            valid: values.length,
-            mean: values.length
-                ? values.reduce((total, value) => total + value, 0) / values.length
-                : null,
-        };
-    })
-    .sort((left, right) => Number(left.name) - Number(right.name));
+        tab.addEventListener(
+          'keydown',
+          event => {
 
-const maxRate = Math.max(
-    ...groups.map(group => group.mean ?? 0),
-    1
-);
+            const next =
+              event.key === 'ArrowRight'
+                ? tabs[(index + 1) % tabs.length]
+                : event.key === 'ArrowLeft'
+                  ? tabs[(index + tabs.length - 1) % tabs.length]
+                  : event.key === 'Home'
+                    ? tabs[0]
+                    : event.key === 'End'
+                      ? tabs[tabs.length - 1]
+                      : null;
 
-el('groups').innerHTML = groups
-    .map(group => `
-        <div class="group">
-            <span class="group-label">${escapeHtml(group.name)}</span>
-            <div class="track">
-                <span style="width:${(group.mean ?? 0) / maxRate * 100}%"></span>
+            if (next) {
+              event.preventDefault();
+              showTab(next);
+              next.focus();
+            }
+          }
+        );
+      }
+    );
+
+    window.addEventListener(
+      'resize',
+      resizeViews
+    );
+
+
+    /* ==================== CABECERA ==================== */
+
+    document.title =
+      meta.title;
+
+    el('title').textContent =
+      meta.title;
+
+    el('region').textContent =
+      meta.region + ' / Gimnasios low-cost';
+
+    el('period').textContent =
+      meta.period;
+
+    el('target-description').textContent =
+      meta.target_description;
+
+    el('baseline-description').textContent =
+      meta.baseline_description;
+
+    el('revenue-method').textContent =
+      meta.revenue_method;
+
+
+    /* ==================== FORMULAS ==================== */
+
+    el('business-formulas')
+      .replaceChildren(
+        ...(meta.business_formulas || [])
+          .map(item => {
+
+            const row =
+              document.createElement('li');
+
+            const heading =
+              document.createElement('strong');
+
+            const equation =
+              document.createElement('code');
+
+            const detail =
+              document.createElement('span');
+
+            heading.textContent =
+              item.label;
+
+            equation.textContent =
+              item.expression;
+
+            detail.textContent =
+              item.detail;
+
+            row.append(
+              heading,
+              equation,
+              detail
+            );
+
+            return row;
+          })
+      );
+
+
+    /* ==================== KPI ==================== */
+
+    if (meta.business_kpis?.length) {
+
+      el('business-summary').hidden =
+        false;
+
+      el('business-kpi-rows').innerHTML =
+        meta.business_kpis
+          .map(
+            row => `
+              <tr>
+                <td>${escapeHtml(row.strategy)}</td>
+                <td>${fmt(row.viable)} / ${fmt(row.selected)}</td>
+                <td>${money(row.revenue_eur)}</td>
+                <td>${money(row.margin_eur)}</td>
+                <td>${money(row.losses_eur)}</td>
+                <td>${fmt(row.demand_per_competitor,1)}</td>
+              </tr>
+            `
+          )
+          .join('');
+
+      el('business-robustness-rows').innerHTML =
+        meta.business_robustness?.length
+          ? meta.business_robustness
+              .map(
+                row => `
+                  <tr>
+                    <td>${escapeHtml(row.name)}</td>
+                    <td>
+                      ${fmt(row.appearances)}
+                      /
+                      ${fmt(row.total_scenarios)}
+                    </td>
+                    <td>${fmt(row.average_position,1)}</td>
+                    <td>${money(row.minimum_revenue_eur)}</td>
+                  </tr>
+                `
+              )
+              .join('')
+          : `
+              <tr>
+                <td colspan="4" class="empty">
+                  No hay resultados de sensibilidad para estos municipios.
+                </td>
+              </tr>
+            `;
+    }
+
+
+    listItems(
+      'assumptions',
+      meta.assumptions,
+      'Sin supuestos documentados.'
+    );
+
+    listItems(
+      'limitations',
+      meta.limitations,
+      'Sin limitaciones documentadas.'
+    );
+
+
+    /* ==================== RESUMEN ==================== */
+
+    el('selection-count').textContent =
+      `${selected.length} municipios`;
+
+    el('selection-revenue-label').textContent =
+      `Facturacion anual estimada · ${selected.length} centros`;
+
+    el('total-revenue').textContent =
+      money(
+        sumField(
+          selected,
+          'annual_revenue_eur'
+        )
+      );
+
+    el('candidate-count').textContent =
+      fmt(
+        rows.filter(
+          row => row.candidate
+        ).length
+      );
+
+    el('municipal-count').textContent =
+      fmt(rows.length);
+
+    el('target-count').textContent =
+      fmt(
+        sumField(
+          rows,
+          'target_population'
+        )
+      );
+
+    el('competition-count').textContent =
+      fmt(DATA.competitors.length);
+
+
+    /* ==================== TABLAS DECISION ==================== */
+
+    el('selected-rows').innerHTML =
+      selected
+        .map(
+          (row, index) => `
+            <tr>
+              <td>${index + 1}</td>
+
+              <td class="name">
+                <button
+                  class="place"
+                  data-id="${escapeHtml(row.id)}">
+                  ${escapeHtml(row.name)}
+                </button>
+
+                <small>
+                  ${escapeHtml(row.province)}
+                </small>
+              </td>
+
+              <td>
+                ${fmt(row.demand_per_competitor)}
+              </td>
+
+              <td class="money">
+                ${revenue(row)}
+              </td>
+
+              <td class="reason">
+                ${escapeHtml(row.reason)}
+              </td>
+            </tr>
+          `
+        )
+        .join('');
+
+
+    el('baseline-rows').innerHTML =
+      baseline
+        .map(
+          (row, index) => `
+            <tr>
+              <td>
+                <button
+                  class="place"
+                  data-id="${escapeHtml(row.id)}">
+                  B${index + 1} · ${escapeHtml(row.name)}
+                </button>
+              </td>
+
+              <td>
+                ${fmt(row.demand_per_competitor)}
+              </td>
+
+              <td class="money">
+                ${revenue(row)}
+              </td>
+            </tr>
+          `
+        )
+        .join('');
+
+
+    el('comparison-rows').innerHTML =
+      [
+        ['Seleccion',selected],
+        ['Baseline',baseline]
+      ]
+        .map(
+          ([label,listing]) => {
+
+            const valid =
+              listing.filter(
+                row =>
+                  row.demand_per_competitor != null
+              );
+
+            const mean =
+              valid.length
+                ? valid.reduce(
+                    (total,row) =>
+                      total +
+                      row.demand_per_competitor,
+                    0
+                  ) / valid.length
+                : null;
+
+            const total = {
+              annual_revenue_eur:
+                sumField(
+                  listing,
+                  'annual_revenue_eur'
+                ),
+
+              revenue_low_eur:
+                sumField(
+                  listing,
+                  'revenue_low_eur'
+                ),
+
+              revenue_high_eur:
+                sumField(
+                  listing,
+                  'revenue_high_eur'
+                )
+            };
+
+            return `
+              <tr>
+                <td>${label}</td>
+
+                <td>
+                  ${fmt(mean)}
+                  <small>
+                    ${valid.length}/${listing.length}
+                    calculables
+                  </small>
+                </td>
+
+                <td class="money">
+                  ${revenue(total)}
+                </td>
+              </tr>
+            `;
+          }
+        )
+        .join('');
+
+
+    const entrants =
+      selected.filter(
+        row =>
+          !DATA.baseline.includes(row.id)
+      );
+
+    const exits =
+      baseline.filter(
+        row =>
+          !DATA.selection.includes(row.id)
+      );
+
+    el('changes').textContent =
+      'Entran: ' +
+      (
+        entrants
+          .map(row => row.name)
+          .join(', ') ||
+        'ninguno'
+      ) +
+      '. Salen: ' +
+      (
+        exits
+          .map(row => row.name)
+          .join(', ') ||
+        'ninguno'
+      ) +
+      '.';
+
+
+    el('selection-note').textContent =
+      'Estimaciones del estudio; no equivalen a ventas garantizadas ni a beneficio.';
+
+
+    /* ==================== MERCADO MUNICIPAL ==================== */
+
+    el('municipal-rows').innerHTML =
+      [...rows]
+        .sort(
+          (left,right) =>
+            left.name.localeCompare(
+              right.name,
+              'es'
+            )
+        )
+        .map(
+          row => `
+            <tr>
+
+              <td>
+                ${escapeHtml(row.name)}
+
+                <small>
+                  ${escapeHtml(row.province)}
+                </small>
+              </td>
+
+              <td>
+                ${fmt(row.target_population)}
+              </td>
+
+              <td>
+                ${fmt(row.growth_pct,1)}
+              </td>
+
+              <td>
+                ${money(row.income_eur)}
+              </td>
+
+              <td>
+                ${fmt(row.competitor_count)}
+
+                <small>
+                  ${escapeHtml(row.coverage_note)}
+                </small>
+              </td>
+
+              <td>
+                ${fmt(rate(row),2)}
+              </td>
+
+            </tr>
+          `
+        )
+        .join('');
+
+
+    /* ==================== OFERTA POR CLUSTER ==================== */
+
+    const assignedRows =
+      rows.filter(
+        row =>
+          row.cluster !== 'Asignación no publicada' &&
+          row.cluster !== null &&
+          row.cluster !== undefined &&
+          row.cluster !== ''
+      );
+
+    const grouped =
+      new Map();
+
+    for (const row of assignedRows) {
+
+      if (!grouped.has(row.cluster)) {
+        grouped.set(
+          row.cluster,
+          []
+        );
+      }
+
+      grouped
+        .get(row.cluster)
+        .push(row);
+    }
+
+
+    const groups =
+      [...grouped]
+        .map(
+          ([name,members]) => {
+
+            const values =
+              members
+                .map(rate)
+                .filter(
+                  value =>
+                    value != null
+                );
+
+            return {
+              name,
+              count: members.length,
+              valid: values.length,
+
+              mean:
+                values.length
+                  ? values.reduce(
+                      (total,value) =>
+                        total + value,
+                      0
+                    ) / values.length
+                  : null
+            };
+          }
+        )
+        .sort(
+          (left,right) =>
+            Number(left.name) -
+            Number(right.name)
+        );
+
+
+    const maxRate =
+      Math.max(
+        ...groups.map(
+          group =>
+            group.mean ?? 0
+        ),
+        1
+      );
+
+
+    el('groups').innerHTML =
+      groups
+        .map(
+          group => `
+            <div class="group">
+
+              <span class="group-label">
+                ${escapeHtml(group.name)}
+              </span>
+
+              <div class="track">
+                <span
+                  style="width:${(group.mean ?? 0) / maxRate * 100}%">
+                </span>
+              </div>
+
+              <strong>
+                ${fmt(group.mean,2)}
+              </strong>
+
             </div>
-            <strong>${fmt(group.mean, 2)}</strong>
-        </div>
-    `)
-    .join('');
+          `
+        )
+        .join('');
 
-el('group-note').textContent = groups
-    .map(group =>
-        `${group.name}: ${group.valid}/${group.count} calculables`
-    )
-    .join(' · ');
-    const audit=DATA.audit||[];
-    const references=audit.filter(row=>row.status==='reference_found').length;
-    const specialized=audit.filter(row=>row.status==='specialized').length;
-    const needsConfirmation=audit.filter(row=>row.status==='needs_confirmation').length;
-    el('audit-summary').textContent=audit.length?`Muestra revisada: ${audit.length} registros y ${references+specialized+needsConfirmation} referencias públicas localizadas; ${specialized} instalaciones especializadas o pabellones; ${needsConfirmation} requieren confirmación adicional. No confirma que sean gimnasios convencionales activos ni mide la cobertura de OSM. Fuente: ${DATA.audit_source||'no indicada'}.`:'No se ha entregado una muestra de auditoría.';
-    el('audit-rows').innerHTML=audit.map(row=>`<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.municipality_name)}</td><td>${({correct:'Referencia corroborada',incorrect:'Referencia no corroborada',unresolved:'Sin resolver',pending:'Pendiente',reference_found:'Referencia pública localizada',specialized:'Instalación especializada o pabellón',needs_confirmation:'Requiere confirmación adicional'})[row.status]}<small>${escapeHtml(row.finding)}</small></td><td>${safeLink(row.evidence_url?'Ver evidencia':'Sin evidencia',row.evidence_url)}<small>${escapeHtml(row.checked_date)}</small></td></tr>`).join('');
-    if(!DATA.audit.length)el('audit-rows').innerHTML='<tr><td colspan="4" class="empty">Sin registros entregados.</td></tr>';
-    function download(id,content,type){el(id).href=URL.createObjectURL(new Blob([content],{type}));}
-    function csv(records){if(!records.length)return '';const columns=[...new Set(records.flatMap(row=>Object.keys(row)))];const cell=value=>{let text=String(value??'');if(/^[=+\-@\t\r]/.test(text))text="'"+text;return '"'+text.replaceAll('"','""')+'"';};return '\uFEFF'+[columns.map(cell).join(','),...records.map(row=>columns.map(key=>cell(row[key])).join(','))].join('\r\n');}
-    download('data-download',JSON.stringify(DATA,null,2),'application/json');download('municipal-download',csv(rows),'text/csv;charset=utf-8');download('audit-download',csv(DATA.audit),'text/csv;charset=utf-8');
-    if(window.L){
-      const map=L.map('map',{preferCanvas:true,fadeAnimation:false,zoomAnimation:false,scrollWheelZoom:false}).setView([rows[0].lat,rows[0].lon],7);
-      L.tileLayer('https://www.ign.es/wmts/ign-base?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=IGNBase-gris&STYLE=default&FORMAT=image/jpeg&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',{attribution:'© IGN',maxZoom:18}).addTo(map);
-      function popup(title,lines,url){const content=document.createElement('div');const heading=document.createElement('strong');heading.textContent=title;content.append(heading);for(const text of lines){const line=document.createElement('div');line.textContent=text;content.append(line);}if(url){const link=document.createElement('a');link.href=url;link.target='_blank';link.rel='noopener noreferrer';link.textContent='Ver fuente';content.append(link);}return content;}
-      map.createPane('competitionPane').style.zIndex=390;map.createPane('candidatePane').style.zIndex=410;
-      const competitionLayer=L.layerGroup(DATA.competitors.map(row=>L.circleMarker([row.lat,row.lon],{pane:'competitionPane',radius:2,color:'#75717b',weight:0.4,opacity:0.35,fillColor:'#75717b',fillOpacity:0.25}).bindPopup(popup(row.name,[],row.url)))).addTo(map);
-      const candidates=rows.filter(row=>row.candidate);const candidateLayer=L.layerGroup(candidates.map(row=>L.circleMarker([row.lat,row.lon],{pane:'candidatePane',radius:4,color:'#2976ad',weight:0.8,opacity:0.55,fillColor:'#dceefa',fillOpacity:0.08}).bindPopup(popup(row.name,[row.reason,money(row.annual_revenue_eur)+' / ano'])))).addTo(map);
-      L.control.layers(null,{['Candidatas ('+candidates.length+')']:candidateLayer,['Competidores ('+DATA.competitors.length+')']:competitionLayer},{collapsed:true}).addTo(map);
-      for(const [label,color] of [['Candidatas','#2976ad'],['Competidores','#75717b']]){const item=document.createElement('span');const swatch=document.createElement('i');swatch.className='dot';swatch.style.background=color;item.append(swatch,document.createTextNode(label));document.querySelector('.map-key').append(item);}
-      const markers=new Map(),baselineMarkers=new Map(),entries=[];
-      for(const [listing,isBaseline] of [[selected,false],[baseline,true]])listing.forEach((row,index)=>{const label=(isBaseline?'B':'')+(index+1);const marker=L.marker([row.lat,row.lon],{icon:L.divIcon({className:'',html:`<span class="rank-marker${isBaseline?' baseline':''}">${label}</span>`,iconSize:[26,26],iconAnchor:[13,13]}),zIndexOffset:isBaseline?900:1000}).bindPopup(popup(label+' · '+row.name,[money(row.annual_revenue_eur)+' / ano',row.reason])).addTo(map);(isBaseline?baselineMarkers:markers).set(row.id,marker);entries.push({row,marker,color:isBaseline?'#005446':'#a100ff'});});
-      const leaders=L.layerGroup().addTo(map);
-      function positionLabels(){leaders.clearLayers();const used=[];for(const {row,marker,color} of entries){const origin=map.latLngToContainerPoint([row.lat,row.lon]);let label=origin;for(let attempt=0;attempt<80;attempt++){const radius=attempt?32+Math.floor((attempt-1)/8)*18:0,angle=attempt%8*Math.PI/4;const candidate=L.point(origin.x+Math.cos(angle)*radius,origin.y+Math.sin(angle)*radius);if(!used.some(other=>Math.abs(other.x-candidate.x)<32&&Math.abs(other.y-candidate.y)<32)){label=candidate;break;}}used.push(label);const location=map.containerPointToLatLng(label);marker.setLatLng(location);if(origin.distanceTo(label)>1)L.polyline([[row.lat,row.lon],location],{color,weight:1,interactive:false}).addTo(leaders);}}
-      map.fitBounds(L.latLngBounds(rows.map(row=>[row.lat,row.lon])),{padding:[24,24],animate:false,maxZoom:10});map.on('moveend zoomend resize',positionLabels);positionLabels();
-      document.querySelectorAll('[data-id]').forEach(button=>button.addEventListener('click',()=>{showTab(el('tab-decision'));const row=byId.get(button.dataset.id);map.setView([row.lat,row.lon],11,{animate:false});(markers.get(row.id)||baselineMarkers.get(row.id)).openPopup();}));
-      window.scopeStudy={rows,selected,baseline,map,markers,baselineMarkers,candidateLayer,competitionLayer};
-    }else el('map').textContent='Mapa no disponible. Consulta los resultados en las tablas.';
-    if(window.lucide)lucide.createIcons();
+
+    el('group-note').textContent =
+      groups
+        .map(
+          group =>
+            `${group.name}: ${group.valid}/${group.count} calculables`
+        )
+        .join(' · ');
+
+
+    /* ==================== AUDITORIA ==================== */
+
+    const audit =
+      DATA.audit || [];
+
+    const references =
+      audit.filter(
+        row =>
+          row.status === 'reference_found'
+      ).length;
+
+    const specialized =
+      audit.filter(
+        row =>
+          row.status === 'specialized'
+      ).length;
+
+    const needsConfirmation =
+      audit.filter(
+        row =>
+          row.status === 'needs_confirmation'
+      ).length;
+
+
+    el('audit-summary').textContent =
+      audit.length
+        ? `Muestra revisada: ${audit.length} registros y ${references + specialized + needsConfirmation} referencias públicas localizadas; ${specialized} instalaciones especializadas o pabellones; ${needsConfirmation} requieren confirmación adicional. No confirma que sean gimnasios convencionales activos ni mide la cobertura de OSM. Fuente: ${DATA.audit_source || 'no indicada'}.`
+        : 'No se ha entregado una muestra de auditoría.';
+
+
+    el('audit-rows').innerHTML =
+      audit
+        .map(
+          row => `
+            <tr>
+
+              <td>
+                ${escapeHtml(row.name)}
+              </td>
+
+              <td>
+                ${escapeHtml(row.municipality_name)}
+              </td>
+
+              <td>
+                ${
+                  ({
+                    correct:
+                      'Referencia corroborada',
+
+                    incorrect:
+                      'Referencia no corroborada',
+
+                    unresolved:
+                      'Sin resolver',
+
+                    pending:
+                      'Pendiente',
+
+                    reference_found:
+                      'Referencia pública localizada',
+
+                    specialized:
+                      'Instalación especializada o pabellón',
+
+                    needs_confirmation:
+                      'Requiere confirmación adicional'
+                  })[row.status]
+                }
+
+                <small>
+                  ${escapeHtml(row.finding)}
+                </small>
+              </td>
+
+              <td>
+                ${
+                  safeLink(
+                    row.evidence_url
+                      ? 'Ver evidencia'
+                      : 'Sin evidencia',
+                    row.evidence_url
+                  )
+                }
+
+                <small>
+                  ${escapeHtml(row.checked_date)}
+                </small>
+              </td>
+
+            </tr>
+          `
+        )
+        .join('');
+
+
+    if (!DATA.audit.length) {
+      el('audit-rows').innerHTML =
+        `
+          <tr>
+            <td
+              colspan="4"
+              class="empty">
+              Sin registros entregados.
+            </td>
+          </tr>
+        `;
+    }
+
+
+    /* ==================== DESCARGAS ==================== */
+
+    function download(
+      id,
+      content,
+      type
+    ) {
+      el(id).href =
+        URL.createObjectURL(
+          new Blob(
+            [content],
+            {type}
+          )
+        );
+    }
+
+
+    function csv(records) {
+
+      if (!records.length) {
+        return '';
+      }
+
+      const columns =
+        [
+          ...new Set(
+            records.flatMap(
+              row =>
+                Object.keys(row)
+            )
+          )
+        ];
+
+      const cell =
+        value => {
+
+          let text =
+            String(value ?? '');
+
+          if (
+            /^[=+\-@\t\r]/.test(text)
+          ) {
+            text =
+              "'" + text;
+          }
+
+          return (
+            '"' +
+            text.replaceAll(
+              '"',
+              '""'
+            ) +
+            '"'
+          );
+        };
+
+      return (
+        '\uFEFF' +
+        [
+          columns
+            .map(cell)
+            .join(','),
+
+          ...records
+            .map(
+              row =>
+                columns
+                  .map(
+                    key =>
+                      cell(row[key])
+                  )
+                  .join(',')
+            )
+        ]
+          .join('\r\n')
+      );
+    }
+
+
+    download(
+      'data-download',
+      JSON.stringify(DATA,null,2),
+      'application/json'
+    );
+
+    download(
+      'municipal-download',
+      csv(rows),
+      'text/csv;charset=utf-8'
+    );
+
+    download(
+      'audit-download',
+      csv(DATA.audit),
+      'text/csv;charset=utf-8'
+    );
+
+
+    /* ==================== MAPA ==================== */
+
+    if (window.L) {
+
+      const map =
+        L.map(
+          'map',
+          {
+            preferCanvas: true,
+            fadeAnimation: false,
+            zoomAnimation: false,
+            scrollWheelZoom: false
+          }
+        )
+        .setView(
+          [rows[0].lat,rows[0].lon],
+          7
+        );
+
+
+      L.tileLayer(
+        'https://www.ign.es/wmts/ign-base?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=IGNBase-gris&STYLE=default&FORMAT=image/jpeg&TILEMATRIXSET=GoogleMapsCompatible&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}',
+        {
+          attribution: '© IGN',
+          maxZoom: 18
+        }
+      )
+      .addTo(map);
+
+
+      function popup(
+        title,
+        lines,
+        url
+      ) {
+
+        const content =
+          document.createElement('div');
+
+        const heading =
+          document.createElement('strong');
+
+        heading.textContent =
+          title;
+
+        content.append(heading);
+
+        for (const text of lines) {
+
+          const line =
+            document.createElement('div');
+
+          line.textContent =
+            text;
+
+          content.append(line);
+        }
+
+        if (url) {
+
+          const link =
+            document.createElement('a');
+
+          link.href =
+            url;
+
+          link.target =
+            '_blank';
+
+          link.rel =
+            'noopener noreferrer';
+
+          link.textContent =
+            'Ver fuente';
+
+          content.append(link);
+        }
+
+        return content;
+      }
+
+
+      map.createPane(
+        'competitionPane'
+      ).style.zIndex =
+        390;
+
+      map.createPane(
+        'candidatePane'
+      ).style.zIndex =
+        410;
+
+
+      const competitionLayer =
+        L.layerGroup(
+          DATA.competitors.map(
+            row =>
+              L.circleMarker(
+                [row.lat,row.lon],
+                {
+                  pane:
+                    'competitionPane',
+
+                  radius:
+                    2,
+
+                  color:
+                    '#75717b',
+
+                  weight:
+                    0.4,
+
+                  opacity:
+                    0.35,
+
+                  fillColor:
+                    '#75717b',
+
+                  fillOpacity:
+                    0.25
+                }
+              )
+              .bindPopup(
+                popup(
+                  row.name,
+                  [],
+                  row.url
+                )
+              )
+          )
+        )
+        .addTo(map);
+
+
+      const candidates =
+        rows.filter(
+          row =>
+            row.candidate
+        );
+
+
+      const candidateLayer =
+        L.layerGroup(
+          candidates.map(
+            row =>
+              L.circleMarker(
+                [row.lat,row.lon],
+                {
+                  pane:
+                    'candidatePane',
+
+                  radius:
+                    4,
+
+                  color:
+                    '#2976ad',
+
+                  weight:
+                    0.8,
+
+                  opacity:
+                    0.55,
+
+                  fillColor:
+                    '#dceefa',
+
+                  fillOpacity:
+                    0.08
+                }
+              )
+              .bindPopup(
+                popup(
+                  row.name,
+                  [
+                    row.reason,
+                    money(
+                      row.annual_revenue_eur
+                    ) +
+                    ' / ano'
+                  ]
+                )
+              )
+          )
+        )
+        .addTo(map);
+
+
+      L.control.layers(
+        null,
+        {
+          ['Candidatas (' + candidates.length + ')']:
+            candidateLayer,
+
+          ['Competidores (' + DATA.competitors.length + ')']:
+            competitionLayer
+        },
+        {
+          collapsed: true
+        }
+      )
+      .addTo(map);
+
+
+      for (
+        const [label,color]
+        of [
+          ['Candidatas','#2976ad'],
+          ['Competidores','#75717b']
+        ]
+      ) {
+
+        const item =
+          document.createElement('span');
+
+        const swatch =
+          document.createElement('i');
+
+        swatch.className =
+          'dot';
+
+        swatch.style.background =
+          color;
+
+        item.append(
+          swatch,
+          document.createTextNode(label)
+        );
+
+        document
+          .querySelector('.map-key')
+          .append(item);
+      }
+
+
+      const markers =
+        new Map();
+
+      const baselineMarkers =
+        new Map();
+
+      const entries =
+        [];
+
+
+      for (
+        const [listing,isBaseline]
+        of [
+          [selected,false],
+          [baseline,true]
+        ]
+      ) {
+
+        listing.forEach(
+          (row,index) => {
+
+            const label =
+              (isBaseline ? 'B' : '') +
+              (index + 1);
+
+            const marker =
+              L.marker(
+                [row.lat,row.lon],
+                {
+                  icon:
+                    L.divIcon({
+                      className: '',
+                      html:
+                        `<span class="rank-marker${isBaseline ? ' baseline' : ''}">${label}</span>`,
+                      iconSize:
+                        [26,26],
+                      iconAnchor:
+                        [13,13]
+                    }),
+
+                  zIndexOffset:
+                    isBaseline
+                      ? 900
+                      : 1000
+                }
+              )
+              .bindPopup(
+                popup(
+                  label + ' · ' + row.name,
+                  [
+                    money(
+                      row.annual_revenue_eur
+                    ) +
+                    ' / ano',
+
+                    row.reason
+                  ]
+                )
+              )
+              .addTo(map);
+
+
+            (
+              isBaseline
+                ? baselineMarkers
+                : markers
+            )
+              .set(
+                row.id,
+                marker
+              );
+
+
+            entries.push({
+              row,
+              marker,
+              color:
+                isBaseline
+                  ? '#005446'
+                  : '#a100ff'
+            });
+          }
+        );
+      }
+
+
+      const leaders =
+        L.layerGroup()
+          .addTo(map);
+
+
+      function positionLabels() {
+
+        leaders.clearLayers();
+
+        const used =
+          [];
+
+        for (
+          const {
+            row,
+            marker,
+            color
+          }
+          of entries
+        ) {
+
+          const origin =
+            map.latLngToContainerPoint(
+              [row.lat,row.lon]
+            );
+
+          let label =
+            origin;
+
+          for (
+            let attempt = 0;
+            attempt < 80;
+            attempt++
+          ) {
+
+            const radius =
+              attempt
+                ? 32 +
+                  Math.floor(
+                    (attempt - 1) / 8
+                  ) * 18
+                : 0;
+
+            const angle =
+              attempt % 8 *
+              Math.PI / 4;
+
+            const candidate =
+              L.point(
+                origin.x +
+                Math.cos(angle) *
+                radius,
+
+                origin.y +
+                Math.sin(angle) *
+                radius
+              );
+
+
+            if (
+              !used.some(
+                other =>
+                  Math.abs(
+                    other.x -
+                    candidate.x
+                  ) < 32 &&
+                  Math.abs(
+                    other.y -
+                    candidate.y
+                  ) < 32
+              )
+            ) {
+
+              label =
+                candidate;
+
+              break;
+            }
+          }
+
+
+          used.push(label);
+
+          const location =
+            map.containerPointToLatLng(
+              label
+            );
+
+          marker.setLatLng(
+            location
+          );
+
+
+          if (
+            origin.distanceTo(label) > 1
+          ) {
+
+            L.polyline(
+              [
+                [row.lat,row.lon],
+                location
+              ],
+              {
+                color,
+                weight: 1,
+                interactive: false
+              }
+            )
+            .addTo(leaders);
+          }
+        }
+      }
+
+
+      map.fitBounds(
+        L.latLngBounds(
+          rows.map(
+            row =>
+              [row.lat,row.lon]
+          )
+        ),
+        {
+          padding: [24,24],
+          animate: false,
+          maxZoom: 10
+        }
+      );
+
+
+      map.on(
+        'moveend zoomend resize',
+        positionLabels
+      );
+
+      positionLabels();
+
+
+      document
+        .querySelectorAll('[data-id]')
+        .forEach(
+          button =>
+            button.addEventListener(
+              'click',
+              () => {
+
+                showTab(
+                  el('tab-decision')
+                );
+
+                const row =
+                  byId.get(
+                    button.dataset.id
+                  );
+
+                map.setView(
+                  [row.lat,row.lon],
+                  11,
+                  {
+                    animate: false
+                  }
+                );
+
+                (
+                  markers.get(row.id) ||
+                  baselineMarkers.get(row.id)
+                )
+                  ?.openPopup();
+              }
+            )
+        );
+
+
+      window.scopeStudy = {
+        rows,
+        selected,
+        baseline,
+        map,
+        markers,
+        baselineMarkers,
+        candidateLayer,
+        competitionLayer
+      };
+
+    } else {
+
+      el('map').textContent =
+        'Mapa no disponible. Consulta los resultados en las tablas.';
+    }
+
+
+    if (window.lucide) {
+      lucide.createIcons();
+    }
+
   </script>
-  <script>__ANALYSIS__</script>
+
+
+  <!-- Aquí se carga streamlit_analysis.js.
+       Debe contener la nueva función simulate() basada en K-means. -->
+
+  <script>
+    __ANALYSIS__
+  </script>
+
 </body>
 </html>

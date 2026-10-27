@@ -122,20 +122,62 @@
 .method-result strong {
   color: var(--accent);
 }
-
-.intelligence-method {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
-  gap: 48px;
-  align-items: start;
+/* Dos columnas iguales: Método | Oferta */
+#intelligence .intelligence {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 32px !important;
+    align-items: start !important;
 }
 
-.intelligence-method > section {
-  min-width: 0;
+#intelligence .intelligence > section {
+    min-width: 0;
+    width: 100%;
 }
 
+/* Compactar el Método del estudio */
+#intelligence .method-step {
+    padding: 10px 0 12px;
+}
+
+#intelligence .method-step-title {
+    margin-bottom: 6px;
+}
+
+#intelligence .method-step p {
+    margin: 6px 0;
+    line-height: 1.4;
+}
+
+#intelligence .method-equations {
+    margin: 8px 0;
+    padding: 8px 12px;
+    gap: 2px;
+    line-height: 1.35;
+}
+
+#intelligence .method-main-equation {
+    margin: 8px 0;
+    padding: 10px 12px;
+    min-height: 0;
+}
+
+#intelligence .method-decision-equation {
+    margin: 8px 0;
+    padding: 10px 12px;
+}
+
+#intelligence .method-result {
+    padding: 7px 10px;
+}
+
+#intelligence .method-step .caption {
+    margin: 5px 0;
+}
+
+/* Solo en pantallas pequeñas pasan a una columna */
 @media (max-width: 900px) {
-  .intelligence-method {
-    grid-template-columns: 1fr;
-  }
+    #intelligence .intelligence {
+        grid-template-columns: 1fr !important;
+    }
 }

@@ -5,38 +5,300 @@ const marketAnalysis = {
         const members = typeof ticket === 'number' && ticket > 0 ? Math.ceil(revenue / ticket) : null;
         return {revenue, members, exactMembers: members == null ? null : revenue / ticket, capacityExceeded: members != null && capacity != null && members > capacity};
     },
-    simulate(study, settings) {
-        const weights = settings.weights;
-        if (Object.values(weights).some(value => !Number.isFinite(value) || value < 0)) return {error: 'Los pesos deben ser numeros no negativos.'};
-        const totalWeight = Object.values(weights).reduce((total, value) => total + value, 0);
-        if (!Number.isFinite(totalWeight) || totalWeight <= 0) return {error: 'Al menos un peso debe ser mayor que cero.'};
-        if (![settings.penetration, settings.ticket, settings.multiplier].every(value => Number.isFinite(value) && value >= 0) || settings.penetration > 1) return {error: 'Parametros de escenario fuera de rango.'};
-        const profiles = study.simulation?.target_profiles || [];
-        const profile = profiles.find(item => item.id === settings.profile);
-        if (settings.profile !== 'current' && !profile) return {error: 'Perfil de publico no disponible.'};
-        const rows = study.municipalities.map(row => {
-            const target = (profile ? profile.populations[row.id] : row.target_population) * settings.multiplier;
-            const members = row.competitor_count == null ? null : target * settings.penetration / (row.competitor_count + 1);
-            return {...row, scenarioTarget: target, scenarioMembers: members, scenarioRevenue: members == null ? null : members * settings.ticket,
-                criteria: {demand: target, income: row.income_eur, growth: row.growth_pct, opportunity: row.score}};
-        });
-        const usable = rows.filter(row => row.scenarioTarget > 0 && Object.entries(weights).every(([key, weight]) => weight === 0 || row.criteria[key] != null));
-        const ranges = {};
-        for (const key of Object.keys(weights)) {
-            const values = usable.map(row => row.criteria[key]).filter(value => value != null);
-            ranges[key] = values.length ? [Math.min(...values), Math.max(...values)] : [0, 0];
-        }
-        for (const row of usable) row.scenarioScore = Object.entries(weights).reduce((total, [key, weight]) => {
-            if (!weight) return total;
-            const [low, high] = ranges[key];
-            return total + weight / totalWeight * (high === low ? .5 : (row.criteria[key] - low) / (high - low)) * 100;
-        }, 0);
-        const order = (left, right) => right.scenarioScore - left.scenarioScore || right.scenarioTarget - left.scenarioTarget || left.id.localeCompare(right.id);
-        const selection = usable.filter(row => row.candidate).sort(order).slice(0, 5);
-        const baseline = [...usable].sort((left, right) => right.scenarioTarget - left.scenarioTarget || left.id.localeCompare(right.id)).slice(0, 5);
-        const total = listing => listing.length !== 5 || listing.some(row => row.scenarioRevenue == null) ? null : listing.reduce((sum, row) => sum + row.scenarioRevenue, 0);
-        return {selection, baseline, selectionTotal: total(selection), baselineTotal: total(baseline), excluded: rows.length - usable.length};
+   simulate(study, settings) {
+    const weights = {
+        population: Number(settings.weights.population),
+        income: Number(settings.weights.income),
+        growth: Number(settings.weights.growth),
+    };
+
+    if (
+        Object.values(weights).some(
+            value => !Number.isFinite(value) || value < 0
+        )
+    ) {
+        return {
+            error: 'Los pesos deben ser números no negativos.',
+        };
     }
+
+    if (Object.values(weights).every(value => value === 0)) {
+        return {
+            error: 'Al menos uno de los pesos debe ser mayor que cero.',
+        };
+    }
+
+    /*
+     * Solo pueden entrar en K-means los municipios con las tres
+     * variables necesarias y población objetivo positiva.
+     */
+    const usable = study.municipalities
+        .filter(row =>
+            Number.isFinite(row.target_population) &&
+            row.target_population > 0 &&
+            Number.isFinite(row.income_eur) &&
+            Number.isFinite(row.growth_pct)
+        )
+        .map(row => ({
+            ...row,
+            rawFeatures: [
+                Math.log1p(row.target_population),
+                row.income_eur,
+                row.growth_pct,
+            ],
+        }));
+
+    if (usable.length < 4) {
+        return {
+            error: 'No hay suficientes municipios completos para formar cuatro clusters.',
+        };
+    }
+
+    /*
+     * Media y desviación típica de cada variable.
+     */
+    const featureCount = 3;
+
+    const means = Array.from(
+        {length: featureCount},
+        (_, featureIndex) =>
+            usable.reduce(
+                (total, row) => total + row.rawFeatures[featureIndex],
+                0
+            ) / usable.length
+    );
+
+    const deviations = Array.from(
+        {length: featureCount},
+        (_, featureIndex) => {
+            const variance =
+                usable.reduce((total, row) => {
+                    const difference =
+                        row.rawFeatures[featureIndex] - means[featureIndex];
+
+                    return total + difference * difference;
+                }, 0) / usable.length;
+
+            return Math.sqrt(variance);
+        }
+    );
+
+    /*
+     * Para que los controles representen pesos de la distancia
+     * euclídea cuadrática, cada variable se multiplica por sqrt(peso).
+     *
+     * d² = wp·Δzp² + wr·Δzr² + wc·Δzc²
+     */
+    const weightVector = [
+        Math.sqrt(weights.population),
+        Math.sqrt(weights.income),
+        Math.sqrt(weights.growth),
+    ];
+
+    const points = usable.map(row => ({
+        ...row,
+        features: row.rawFeatures.map((value, featureIndex) => {
+            const deviation = deviations[featureIndex];
+
+            const standardized =
+                deviation === 0
+                    ? 0
+                    : (value - means[featureIndex]) / deviation;
+
+            return standardized * weightVector[featureIndex];
+        }),
+    }));
+
+    const squaredDistance = (left, right) =>
+        left.reduce((total, value, index) => {
+            const difference = value - right[index];
+            return total + difference * difference;
+        }, 0);
+
+    /*
+     * Inicialización determinista:
+     * 1. Primer centroide: municipio con menor código.
+     * 2. Siguientes centroides: punto más alejado de los ya elegidos.
+     *
+     * Evita que el resultado cambie aleatoriamente al mover un slider.
+     */
+    const sortedPoints = [...points].sort(
+        (left, right) => String(left.id).localeCompare(String(right.id))
+    );
+
+    const centroids = [[...sortedPoints[0].features]];
+
+    while (centroids.length < 4) {
+        let selectedPoint = null;
+        let selectedDistance = -1;
+
+        for (const point of sortedPoints) {
+            const nearestDistance = Math.min(
+                ...centroids.map(centroid =>
+                    squaredDistance(point.features, centroid)
+                )
+            );
+
+            if (nearestDistance > selectedDistance) {
+                selectedPoint = point;
+                selectedDistance = nearestDistance;
+            }
+        }
+
+        centroids.push([...selectedPoint.features]);
+    }
+
+    let assignments = new Array(points.length).fill(-1);
+
+    /*
+     * Iteraciones de K-means.
+     */
+    for (let iteration = 0; iteration < 100; iteration++) {
+        const nextAssignments = points.map(point => {
+            let nearestCluster = 0;
+            let nearestDistance = Infinity;
+
+            centroids.forEach((centroid, clusterIndex) => {
+                const distance = squaredDistance(
+                    point.features,
+                    centroid
+                );
+
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestCluster = clusterIndex;
+                }
+            });
+
+            return nearestCluster;
+        });
+
+        const converged = nextAssignments.every(
+            (cluster, index) => cluster === assignments[index]
+        );
+
+        assignments = nextAssignments;
+
+        const sums = Array.from(
+            {length: 4},
+            () => Array(featureCount).fill(0)
+        );
+
+        const counts = Array(4).fill(0);
+
+        points.forEach((point, pointIndex) => {
+            const cluster = assignments[pointIndex];
+            counts[cluster] += 1;
+
+            point.features.forEach((value, featureIndex) => {
+                sums[cluster][featureIndex] += value;
+            });
+        });
+
+        for (let cluster = 0; cluster < 4; cluster++) {
+            if (counts[cluster] === 0) {
+                continue;
+            }
+
+            centroids[cluster] = sums[cluster].map(
+                value => value / counts[cluster]
+            );
+        }
+
+        if (converged) {
+            break;
+        }
+    }
+
+    /*
+     * Presión competitiva:
+     * competencia ponderada / población objetivo × 10.000.
+     */
+    const clustered = points.map((point, index) => ({
+        ...point,
+        scenarioCluster: assignments[index],
+        competitionRate:
+            Number.isFinite(point.competitors_weighted) &&
+            point.target_population > 0
+                ? (
+                    point.competitors_weighted /
+                    point.target_population
+                ) * 10000
+                : null,
+    }));
+
+    /*
+     * Media de presión competitiva dentro de cada cluster.
+     */
+    const clusterMeans = new Map();
+
+    for (let cluster = 0; cluster < 4; cluster++) {
+        const values = clustered
+            .filter(row => row.scenarioCluster === cluster)
+            .map(row => row.competitionRate)
+            .filter(value => Number.isFinite(value));
+
+        clusterMeans.set(
+            cluster,
+            values.length
+                ? values.reduce((total, value) => total + value, 0) /
+                  values.length
+                : null
+        );
+    }
+
+    /*
+     * Candidato si su presión competitiva es inferior a la media
+     * de su nuevo cluster.
+     */
+    const evaluated = clustered.map(row => {
+        const clusterMean = clusterMeans.get(row.scenarioCluster);
+
+        return {
+            ...row,
+            clusterMean,
+            scenarioCandidate:
+                Number.isFinite(row.competitionRate) &&
+                Number.isFinite(clusterMean) &&
+                row.competitionRate < clusterMean,
+        };
+    });
+
+    const candidates = evaluated.filter(
+        row => row.scenarioCandidate
+    );
+
+    /*
+     * Mantiene la facturación publicada por el módulo de negocio.
+     * El simulador cambia los clusters y la condición de candidato,
+     * pero no inventa otra fórmula económica.
+     */
+    const selection = candidates
+        .filter(row => Number.isFinite(row.annual_revenue_eur))
+        .sort(
+            (left, right) =>
+                right.annual_revenue_eur - left.annual_revenue_eur ||
+                String(left.id).localeCompare(String(right.id))
+        )
+        .slice(0, 5);
+
+    const selectionTotal =
+        selection.length === 5
+            ? selection.reduce(
+                (total, row) => total + row.annual_revenue_eur,
+                0
+            )
+            : null;
+
+    return {
+        selection,
+        selectionTotal,
+        candidateCount: candidates.length,
+        excluded:
+            study.municipalities.length - usable.length,
+        clusterMeans,
+    };
+}
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = marketAnalysis;
 if (typeof window !== 'undefined') window.marketAnalysis = marketAnalysis;
@@ -121,28 +383,111 @@ if (typeof document !== 'undefined') {
     updateFinance();
 
     const simulation = DATA.simulation;
+
     el('simulation-controls').hidden = !simulation;
     el('simulation-empty').hidden = !!simulation;
     el('reset-scenario').disabled = !simulation;
+
     if (simulation) {
         function resetSimulation() {
-            setValue('target-scale', 100);setValue('penetration', simulation.penetration * 100);setValue('scenario-ticket', simulation.annual_ticket_eur);
-            for (const key of ['demand', 'income', 'growth']) {el('weight-' + key).max = Math.max(100, simulation.weights[key]);el('weight-' + key).step = 'any';setValue('weight-' + key, simulation.weights[key]);}
+            setValue('weight-demand', 1);
+            setValue('weight-income', 1);
+            setValue('weight-growth', 1);
+
             updateSimulation();
         }
+
         function updateSimulation() {
-            const weights = Object.fromEntries(['demand', 'income', 'growth'].map(key => [key, readNumber('weight-' + key)]));
-            el('target-scale-value').textContent = fmt(readNumber('target-scale')) + ' %';
-            for (const [key, value] of Object.entries(weights)) el('weight-' + key + '-value').textContent = fmt(value, 2);
-            const result = marketAnalysis.simulate(DATA, {profile: 'current', multiplier: readNumber('target-scale') / 100, penetration: readNumber('penetration') == null ? NaN : readNumber('penetration') / 100, ticket: readNumber('scenario-ticket') ?? NaN, weights});
-            el('scenario-message').textContent = result.error || (result.selection.length < 5 ? 'No hay cinco candidatas con datos suficientes para estos pesos.' : `${result.excluded} municipios excluidos por datos insuficientes o publico objetivo nulo. Seleccion dentro de las candidatas entregadas.`);
-            el('scenario-total').textContent = money(result.selectionTotal);
-            el('scenario-baseline').textContent = money(result.baselineTotal);
-            el('scenario-rows').innerHTML = (result.selection || []).map((row, index) => `<tr><td>${index + 1}</td><td class="name">${escapeHtml(row.name)}</td><td>${fmt(row.scenarioScore, 1)}</td><td>${fmt(row.scenarioMembers)}</td><td>${money(row.scenarioRevenue)}</td></tr>`).join('');
-            el('scenario-baseline-names').textContent = result.baseline ? 'Baseline del escenario: ' + result.baseline.map(row => row.name).join(', ') + '.' : '';
+            const weights = {
+                population: readNumber('weight-demand'),
+                income: readNumber('weight-income'),
+                growth: readNumber('weight-growth'),
+            };
+
+            el('weight-demand-value').textContent =
+                fmt(weights.population, 1);
+
+            el('weight-income-value').textContent =
+                fmt(weights.income, 1);
+
+            el('weight-growth-value').textContent =
+                fmt(weights.growth, 1);
+
+            const result = marketAnalysis.simulate(
+                DATA,
+                {weights}
+            );
+
+            if (result.error) {
+                el('scenario-message').textContent = result.error;
+                el('scenario-candidate-count').textContent = 'n/d';
+                el('scenario-total').textContent = 'n/d';
+                el('scenario-rows').innerHTML = '';
+                return;
+            }
+
+            el('scenario-candidate-count').textContent =
+                fmt(result.candidateCount);
+
+            el('scenario-total').textContent =
+                money(result.selectionTotal);
+
+            el('scenario-message').textContent =
+                `${result.excluded} municipios excluidos por falta de ` +
+                `población, renta o crecimiento. ` +
+                `${result.candidateCount} municipios presentan una presión ` +
+                `competitiva inferior a la media de su cluster.`;
+
+            el('scenario-rows').innerHTML = result.selection.length
+                ? result.selection
+                    .map((row, index) => `
+                        <tr>
+                            <td>${index + 1}</td>
+
+                            <td class="name">
+                                ${escapeHtml(row.name)}
+                            </td>
+
+                            <td>
+                                ${fmt(row.scenarioCluster)}
+                            </td>
+
+                            <td>
+                                ${fmt(row.competitionRate, 2)}
+                            </td>
+
+                            <td>
+                                ${fmt(row.clusterMean, 2)}
+                            </td>
+
+                            <td>
+                                ${money(row.annual_revenue_eur)}
+                            </td>
+                        </tr>
+                    `)
+                    .join('')
+                : `
+                    <tr>
+                        <td colspan="6" class="empty">
+                            No hay municipios seleccionables con estos pesos.
+                        </td>
+                    </tr>
+                `;
         }
-        for (const control of el('simulation-controls').querySelectorAll('input,select')) control.addEventListener('input', updateSimulation);
-        el('reset-scenario').addEventListener('click', resetSimulation);
+
+        for (const id of [
+            'weight-demand',
+            'weight-income',
+            'weight-growth',
+        ]) {
+            el(id).addEventListener('input', updateSimulation);
+        }
+
+        el('reset-scenario').addEventListener(
+            'click',
+            resetSimulation
+        );
+
         resetSimulation();
     }
 
