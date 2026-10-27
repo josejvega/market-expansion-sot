@@ -21,6 +21,8 @@ from src.procesado.common.paths import (
 MODEL_CANDIDATES_FILENAME = "municipios_candidatos.parquet"
 MODEL_CANDIDATES_S3_KEY = f"results/{MODEL_CANDIDATES_FILENAME}"
 BUSINESS_RESULTS_PREFIX = "results/negocio"
+AUDIT_SAMPLE_FILENAME = "auditoria_20_gimnasios.csv"
+AUDIT_SAMPLE_S3_KEY = f"{BUSINESS_RESULTS_PREFIX}/{AUDIT_SAMPLE_FILENAME}"
 BUSINESS_OUTPUTS = {
     "selection": "seleccion_modelo_central.csv",
     "baseline": "baseline_central.csv",
@@ -692,6 +694,81 @@ def load_business_outputs(
     return tables, source
 
 
+def load_audit_sample() -> tuple[list[dict[str, object]], str]:
+    """Load the manually reviewed OSM sample exclusively from S3."""
+    settings = get_storage_settings()
+    if not settings.bucket_name:
+        raise RuntimeError(
+            "S3_BUCKET es obligatorio para cargar la auditoría de competencia; "
+            f"no se permite leerla desde local. Falta "
+            f"s3://<S3_BUCKET>/{AUDIT_SAMPLE_S3_KEY}."
+        )
+
+    client_options: dict[str, object] = {}
+    if settings.region_name:
+        client_options["region_name"] = settings.region_name
+    try:
+        response = boto3.client("s3", **client_options).get_object(
+            Bucket=settings.bucket_name,
+            Key=AUDIT_SAMPLE_S3_KEY,
+        )
+        with response["Body"] as body:
+            table = pd.read_csv(BytesIO(body.read()), encoding="utf-8-sig")
+    except (BotoCoreError, ClientError) as error:
+        error_code = getattr(error, "response", {}).get(
+            "Error", {}
+        ).get("Code")
+        if error_code in {"NoSuchKey", "404"}:
+            raise RuntimeError(
+                f"Falta s3://{settings.bucket_name}/{AUDIT_SAMPLE_S3_KEY}. "
+                "Publica la muestra revisada antes de iniciar Streamlit; "
+                "no se usa una copia local."
+            ) from error
+        raise RuntimeError(
+            _s3_read_error_message(
+                settings.bucket_name,
+                AUDIT_SAMPLE_S3_KEY,
+                error,
+            )
+        ) from error
+    source = f"S3 · {AUDIT_SAMPLE_S3_KEY}"
+
+    if table.empty:
+        raise ValueError("Muestra de auditoría: no contiene registros.")
+    required = {
+        "name",
+        "municipality_name",
+        "status",
+        "finding",
+        "evidence_url",
+        "checked_date",
+    }
+    missing = sorted(required.difference(table.columns))
+    if missing:
+        raise ValueError(f"Muestra de auditoría: faltan columnas {missing}.")
+    if table[list(required)].isna().any().any() or table[list(required)].astype(
+        "string"
+    ).apply(lambda column: column.str.strip().eq("")).any().any():
+        raise ValueError("Muestra de auditoría: no se permiten campos vacíos.")
+    if not table["status"].isin(
+        {"reference_found", "specialized", "needs_confirmation"}
+    ).all():
+        raise ValueError("Muestra de auditoría: estado de revisión no reconocido.")
+    if table["evidence_url"].map(
+        lambda value: urlparse(str(value)).scheme == "https"
+        and bool(urlparse(str(value)).netloc)
+    ).eq(False).any():
+        raise ValueError("Muestra de auditoría: la evidencia debe usar URLs HTTPS.")
+    try:
+        pd.to_datetime(table["checked_date"], format="%Y-%m-%d", errors="raise")
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            "Muestra de auditoría: checked_date debe usar YYYY-MM-DD."
+        ) from error
+
+    return table.to_dict(orient="records"), source
+
+
 def _s3_read_error_message(
     bucket: str,
     key: str,
@@ -845,10 +922,24 @@ def validate_study(study: dict) -> dict:
         path = f"audit[{index}]"
         for key in ("name", "municipality_name"):
             text(row.get(key), f"{path}.{key}")
-        if row.get("status") not in ("pending", "unresolved", "correct", "incorrect"):
+        if row.get("status") not in (
+            "pending",
+            "unresolved",
+            "correct",
+            "incorrect",
+            "reference_found",
+            "specialized",
+            "needs_confirmation",
+        ):
             fail(f"{path}.status", "usar pending, unresolved, correct o incorrect")
         url(row.get("evidence_url"), f"{path}.evidence_url")
-        if row["status"] in ("correct", "incorrect"):
+        if row["status"] in (
+            "correct",
+            "incorrect",
+            "reference_found",
+            "specialized",
+            "needs_confirmation",
+        ):
             text(row.get("evidence_url"), f"{path}.evidence_url")
             text(row.get("finding"), f"{path}.finding")
             try:

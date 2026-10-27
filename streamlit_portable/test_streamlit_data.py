@@ -13,8 +13,10 @@ from shapely.geometry import Point, Polygon
 
 from botocore.exceptions import ClientError, NoCredentialsError
 from streamlit_data import (
+    AUDIT_SAMPLE_S3_KEY,
     BUSINESS_OUTPUTS,
     add_municipality_coordinates,
+    load_audit_sample,
     load_business_outputs,
     load_municipality_data,
     prepare_competitor_records,
@@ -391,6 +393,44 @@ class BusinessOutputsTests(unittest.TestCase):
             ],
         )
 
+    def test_requires_s3_bucket_for_manual_competitor_audit(self) -> None:
+        with patch(
+            "streamlit_data.get_storage_settings",
+            return_value=SimpleNamespace(bucket_name=None, region_name=None),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "no se permite leerla desde local"):
+                load_audit_sample()
+
+    def test_loads_manual_competitor_audit_from_s3(self) -> None:
+        audit_csv = (
+            "name,municipality_name,status,finding,evidence_url,checked_date\n"
+            "Club,Sevilla,reference_found,Referencia localizada,"
+            "https://example.com,2026-10-26\n"
+        )
+        s3_client = unittest.mock.MagicMock()
+        s3_client.get_object.return_value = {
+            "Body": io.BytesIO(audit_csv.encode("utf-8"))
+        }
+
+        with (
+            patch(
+                "streamlit_data.get_storage_settings",
+                return_value=SimpleNamespace(
+                    bucket_name="test-bucket",
+                    region_name="eu-west-1",
+                ),
+            ),
+            patch("streamlit_data.boto3.client", return_value=s3_client),
+        ):
+            audit, source = load_audit_sample()
+
+        self.assertEqual(audit[0]["name"], "Club")
+        self.assertEqual(source, f"S3 · {AUDIT_SAMPLE_S3_KEY}")
+        s3_client.get_object.assert_called_once_with(
+            Bucket="test-bucket",
+            Key=AUDIT_SAMPLE_S3_KEY,
+        )
+
     def test_loads_without_optional_local_model_artifacts(self) -> None:
         with TemporaryDirectory() as directory:
             gold_path = Path(directory) / "gold.parquet"
@@ -457,6 +497,26 @@ class BusinessOutputsTests(unittest.TestCase):
                 "processed/silver/gyms_with_municipality_andalusia.parquet",
             ],
         )
+
+    def test_missing_s3_audit_does_not_fall_back_to_local_csv(self) -> None:
+        s3_client = unittest.mock.MagicMock()
+        s3_client.get_object.side_effect = ClientError(
+            {"Error": {"Code": "NoSuchKey", "Message": "Not found"}},
+            "GetObject",
+        )
+
+        with (
+            patch(
+                "streamlit_data.get_storage_settings",
+                return_value=SimpleNamespace(
+                    bucket_name="test-bucket",
+                    region_name="eu-west-1",
+                ),
+            ),
+            patch("streamlit_data.boto3.client", return_value=s3_client),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "no se usa una copia local"):
+                load_audit_sample()
 
     def test_loads_model_candidate_parquet_from_repository_s3_key(self) -> None:
         gold_parquet = io.BytesIO()

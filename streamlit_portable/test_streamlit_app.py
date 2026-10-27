@@ -3,6 +3,8 @@ from __future__ import annotations
 import hashlib
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import geopandas as gpd
 import pandas as pd
@@ -271,10 +273,36 @@ class Portable2DashboardTests(unittest.TestCase):
         self.assertNotIn("__MARKET__", html)
         self.assertNotIn("__ANALYSIS__", html)
 
+    def test_renders_manual_competitor_audit_sample(self) -> None:
+        audit = [
+            {
+                "name": "Club",
+                "municipality_name": "Municipio 1",
+                "status": "needs_confirmation",
+                "finding": "Confirmar actividad actual.",
+                "evidence_url": "https://example.com/club",
+                "checked_date": "2026-10-26",
+            }
+        ]
+        study = build_study(
+            self.municipalities,
+            has_model_candidates=False,
+            gold_source="Local · Gold",
+            audit=audit,
+            audit_source="S3 · results/negocio/auditoria_20_gimnasios.csv",
+        )
+
+        self.assertEqual(validate_study(study), study)
+        html = render_study(study)
+        self.assertIn('"audit_source":', html)
+        self.assertIn('"name": "Club"', html)
+        self.assertIn("needsConfirmation", html)
+        self.assertIn("Requiere confirmación adicional", html)
+
     def test_static_assets_match_integrated_portable2_files(self) -> None:
         web_dir = Path(__file__).resolve().parent / "web"
         expected_hashes = {
-            "streamlit.html": "e257ddaa812aa04ca85f346f25460bad875f817a6d2ac060f7532837d6eb03f5",
+            "streamlit.html": "72454e86fdc927450a45ba1ed64dafeb38ec7583a9e9a493792cae3c06e6fe2b",
             "streamlit.css": "888cbb72656dda6aeda0bd3124646f80c2a0a522c4bbbf1f225b8d39eed35375",
             "streamlit_analysis.js": "df7e560b61b16f0d4a40264162d941cfaf7111782d40efcdb3d80fdffb5fb13e",
         }

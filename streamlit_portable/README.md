@@ -33,6 +33,24 @@ OSM de instalaciones del mapa. En modo local la ruta se toma de la
 configuración de rutas del repositorio; si no existe, el mapa no muestra esos
 puntos. Los puntos OSM no equivalen a una auditoría de mercado.
 
+La sección **Control de la competencia** muestra una muestra manual de 20
+registros revisados el 26/10/2026, con hallazgos y enlaces públicos. La app lee
+exclusivamente `results/negocio/auditoria_20_gimnasios.csv` desde S3; si falta
+el objeto o no hay credenciales, la app informa el error y no lee una copia
+local. La muestra localiza referencias públicas, pero no confirma que todos
+sean gimnasios convencionales activos ni mide la cobertura de OSM.
+
+La muestra no se genera automáticamente: se compiló a partir de la revisión
+manual documentada en `docs/validacion_20_gimnasios.txt` y su resumen en
+`docs/validacion_20_gimnasios.md`. El CSV del repositorio es el artefacto fuente
+que hay que publicar en S3 antes de arrancar la app:
+
+```bash
+S3_BUCKET=sot-05-market-expansion
+aws s3 cp docs/validacion_20_gimnasios.csv \
+  "s3://${S3_BUCKET}/results/negocio/auditoria_20_gimnasios.csv"
+```
+
 ## Preparar los datos y ejecutar
 
 Desde la raíz del repositorio:
@@ -74,7 +92,11 @@ IAM con permiso `s3:GetObject` sobre los objetos Gold, Silver y el modelo:
 `arn:aws:s3:::<S3_BUCKET>/gold/tabla_oro_municipios_andalucia.parquet` y
 `arn:aws:s3:::<S3_BUCKET>/processed/silver/limites_municipales_andalucia.parquet`,
 `arn:aws:s3:::<S3_BUCKET>/processed/silver/gyms_with_municipality_andalusia.parquet`
-y `arn:aws:s3:::<S3_BUCKET>/results/municipios_candidatos.parquet`.
+y `arn:aws:s3:::<S3_BUCKET>/results/municipios_candidatos.parquet`. Para usar la
+muestra publicada, añade también
+`arn:aws:s3:::<S3_BUCKET>/results/negocio/auditoria_20_gimnasios.csv`.
+Para publicar el archivo con el comando anterior, el usuario o rol necesita
+`s3:PutObject` sobre esa misma clave.
 Configura `S3_BUCKET` y `AWS_DEFAULT_REGION` en el `.env`. boto3 obtendrá las
 credenciales temporales del rol automáticamente: no copies claves AWS a la
 instancia ni al repositorio. Arranca Streamlit en la interfaz de red de la
@@ -95,8 +117,9 @@ La interfaz portable2 incluye campos que Gold no tiene. Las coordenadas se
 calculan a partir de los polígonos municipales Silver; el punto representativo
 solo localiza el municipio, no una ubicación de gimnasio. Gold no incluye un
 score de recomendación: la columna se muestra como no disponible, en vez de
-inventar una puntuación. Los datos turísticos, secciones censales, auditorías
-e intervalos de ingresos tampoco están disponibles. La facturación y
+inventar una puntuación. Los datos turísticos, secciones censales y los
+intervalos de ingresos tampoco están disponibles. La muestra manual de
+competencia solo cubre los 20 registros indicados arriba. La facturación y
 viabilidad son escenarios, no ventas observadas ni predicciones. Los recuentos
 de competencia proceden de OpenStreetMap y no permiten concluir que un
 municipio carezca realmente de competidores.

@@ -29,6 +29,7 @@ from src.procesado.common.paths import GOLD_TABLE_PATH  # noqa: E402
 from streamlit_data import (  # noqa: E402
     BUSINESS_OUTPUTS,
     BUSINESS_RESULTS_PREFIX,
+    load_audit_sample,
     MODEL_CANDIDATES_FILENAME,
     MODEL_CANDIDATES_S3_KEY,
     load_business_outputs,
@@ -52,6 +53,8 @@ def build_study(
     candidates_artifact: str = MODEL_CANDIDATES_S3_KEY,
     business_outputs: dict[str, pd.DataFrame] | None = None,
     business_source: str | None = None,
+    audit: list[dict[str, object]] | None = None,
+    audit_source: str | None = None,
 ) -> dict:
     """Adapt repository Gold, Silver, and model outputs to the dashboard."""
     analysis = evaluar(
@@ -361,6 +364,13 @@ def build_study(
                 "url": None,
             }
         )
+    if audit:
+        metadata["sources"].append(
+            {
+                "label": f"Muestra manual de competencia · {audit_source or 'origen no indicado'}",
+                "url": None,
+            }
+        )
         metadata["sources"].append(
             {
                 "label": (
@@ -461,7 +471,8 @@ def build_study(
         "selection": selection_ids,
         "baseline": baseline_ids,
         "competitors": competitors or [],
-        "audit": [],
+        "audit": audit or [],
+        "audit_source": audit_source,
         "market_checks": [],
         "simulation": {
             "model": "equal_share",
@@ -616,6 +627,7 @@ def main() -> None:
         business_outputs, business_source = load_business_outputs(
             PROJECT_ROOT / "data" / "outputs"
         )
+        audit, audit_source = load_audit_sample()
         study = build_study(
             municipalities,
             has_model_candidates,
@@ -624,6 +636,8 @@ def main() -> None:
             candidates_artifact=candidates_s3_key or str(candidates_path),
             business_outputs=business_outputs,
             business_source=business_source,
+            audit=audit,
+            audit_source=audit_source,
         )
         html = render_study(study)
     except (OSError, ImportError, RuntimeError, ValueError) as error:
