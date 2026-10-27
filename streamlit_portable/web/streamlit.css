@@ -16,3 +16,109 @@
     h2{display:flex;align-items:center;gap:10px;counter-increment:section}
     h2::before{content:counter(section);display:inline-grid;place-items:center;flex:0 0 28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-size:14px}
   
+.method-step {
+  padding: 18px 0 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.method-step:last-child {
+  border-bottom: 0;
+}
+
+.method-step-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+
+.method-number {
+  width: 28px;
+  height: 28px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.method-step p {
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 10px 0;
+}
+
+.method-equations {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+  padding: 14px 16px;
+  background: #faf9fc;
+  border-left: 3px solid var(--accent);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.method-main-equation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin: 14px 0;
+  padding: 16px;
+  background: #faf9fc;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 17px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.method-main-equation .fraction {
+  display: inline-flex;
+  flex-direction: column;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.method-main-equation .numerator {
+  padding: 0 8px 4px;
+  border-bottom: 1px solid currentColor;
+}
+
+.method-main-equation .denominator {
+  padding: 4px 8px 0;
+}
+
+.method-decision-equation {
+  margin: 16px 0;
+  padding: 18px;
+  text-align: center;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: #fbf7ff;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.method-less {
+  padding: 0 12px;
+  color: var(--accent);
+}
+
+.method-result {
+  padding: 11px 14px;
+  background: #f4eefb;
+  border-left: 3px solid var(--accent);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.method-result strong {
+  color: var(--accent);
+}

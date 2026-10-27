@@ -30,7 +30,7 @@
           <span class="fraction"><span class="numerator">Costes fijos anuales</span><span class="denominator">1 − porcentaje de costes variables sobre ventas</span></span>
         </div>
         <p class="caption">Abonados para cubrir costes = facturación mínima anual ÷ cuota anual por abonado.</p>
-        <div class="controls-grid"><label>Costes fijos anuales (EUR)<input id="fixed-cost" type="number" min="0" step="1000" placeholder="Sin dato"></label><label>Costes variables (% de ventas)<input id="variable-cost" type="number" min="0" max="100" step="1" placeholder="Sin dato"></label><label>Cuota anual por abonado (EUR)<input id="finance-ticket" type="number" min="0" step="0.01" placeholder="Sin dato"></label><label>Capacidad maxima (abonados)<input id="capacity" type="number" min="0" step="1" placeholder="Sin dato"></label></div>
+        <div class="controls-grid"><label>Costes fijos anuales (EUR)<input id="fixed-cost" type="number" min="0" step="1000" placeholder="Sin dato"></label><label>Costes variables (% de ventas)<input id="variable-cost" type="number" min="0" max="100" step="1" placeholder="5"></label><label>Cuota anual por abonado (EUR)<input id="finance-ticket" type="number" min="0" step="0.01" placeholder="Sin dato"></label><label>Capacidad maxima (abonados)<input id="capacity" type="number" min="0" step="1" placeholder="Sin dato"></label></div>
         <div class="scenario-summary"><div><strong id="breakeven-revenue">n/d</strong><span>Facturacion anual minima</span></div><div><strong id="breakeven-members">n/d</strong><span>Abonados para cubrir costes</span></div></div>
         <svg id="breakeven-chart" class="breakeven-chart" role="img" aria-label="Gráfica del punto de equilibrio"></svg>
         <p class="caption" id="profitability-answer" role="status"></p><p class="caption" id="capacity-note"></p>
@@ -48,7 +48,100 @@
       <div class="table-wrap municipal-scroll"><table><thead><tr><th>Municipio</th><th>Publico objetivo</th><th>Crecimiento<br>5 anos (%)</th><th>Renta neta anual<br>por persona</th><th>Competidores</th><th>Por 10.000<br>objetivo</th></tr></thead><tbody id="municipal-rows"></tbody></table></div>
     </section>
     <section id="intelligence" role="tabpanel" aria-labelledby="tab-intelligence" hidden>
-      <div class="intelligence"><section><h2>Metodo del estudio</h2><p class="method-copy" id="methodology"></p></section><section><h2>Oferta por grupo</h2><p class="caption">Competidores por 10.000 personas objetivo · media de los municipios con datos</p><div id="groups"></div><p class="caption" id="group-note"></p></section></div>
+      <div class="intelligence"><section>
+  <h2>Método del estudio</h2>
+
+  <div class="method-step">
+    <div class="method-step-title">
+      <span class="method-number">1</span>
+      <strong>Agrupación de municipios comparables</strong>
+    </div>
+
+    <p>
+      Aplicamos <strong>K-means (k = 4)</strong> utilizando población objetivo,
+      renta y crecimiento poblacional.
+    </p>
+
+    <div class="method-equations">
+      <div>x₁ = log(1 + Población<sub>18–50</sub>)</div>
+      <div>x₂ = Renta neta media por persona</div>
+      <div>x₃ = Crecimiento de la población</div>
+    </div>
+
+    <p class="caption">Estandarización previa de las variables:</p>
+
+    <div class="method-main-equation">
+      z = <span class="fraction">
+        <span class="numerator">x − μ</span>
+        <span class="denominator">σ</span>
+      </span>
+    </div>
+  </div>
+
+
+  <div class="method-step">
+    <div class="method-step-title">
+      <span class="method-number">2</span>
+      <strong>Presión competitiva</strong>
+    </div>
+
+    <p>Calculamos la competencia ponderada de cada municipio:</p>
+
+    <div class="method-main-equation">
+      C<sub>i</sub> =
+      Gimnasios + 0,1 × Otras instalaciones deportivas
+    </div>
+
+    <p class="caption">
+      Después la normalizamos por el tamaño del público objetivo:
+    </p>
+
+    <div class="method-main-equation">
+      D<sub>i</sub> =
+      <span class="fraction">
+        <span class="numerator">C<sub>i</sub></span>
+        <span class="denominator">
+          Población<sub>18–50,i</sub>
+        </span>
+      </span>
+      × 10.000
+    </div>
+
+    <p class="caption">
+      Competidores ponderados por cada 10.000 personas de 18–50 años.
+    </p>
+  </div>
+
+
+  <div class="method-step">
+    <div class="method-step-title">
+      <span class="method-number">3</span>
+      <strong>Identificación de oportunidades</strong>
+    </div>
+
+    <p>
+      Comparamos cada municipio con la presión competitiva media
+      de su propio cluster:
+    </p>
+
+    <div class="method-decision-equation">
+      D<sub>i</sub>
+      <span class="method-less">&lt;</span>
+      D̄<sub>cluster(i)</sub>
+    </div>
+
+    <div class="method-result">
+      Menor presión competitiva que la media del cluster
+      <strong>→ candidato potencial</strong>
+    </div>
+
+    <p class="caption">
+      Finalmente, los candidatos se filtran por viabilidad y calidad
+      del dato y se ordenan por facturación anual estimada considerando
+      la capacidad del centro.
+    </p>
+  </div>
+</section><section><h2>Oferta por grupo</h2><p class="caption">Competidores por 10.000 personas objetivo · media de los municipios con datos</p><div id="groups"></div><p class="caption" id="group-note"></p></section></div>
       <section class="estimate" aria-labelledby="estimate-heading">
         <h2 id="estimate-heading">Como se estima la facturacion</h2>
         <p id="revenue-method" class="method-copy"></p>
@@ -104,7 +197,8 @@
     tabs.forEach((tab,index)=>{tab.addEventListener('click',()=>showTab(tab));tab.addEventListener('keydown',event=>{const next=event.key==='ArrowRight'?tabs[(index+1)%tabs.length]:event.key==='ArrowLeft'?tabs[(index+tabs.length-1)%tabs.length]:event.key==='Home'?tabs[0]:event.key==='End'?tabs[tabs.length-1]:null;if(next){event.preventDefault();showTab(next);next.focus();}});});
     window.addEventListener('resize',resizeViews);
     document.title=meta.title;el('title').textContent=meta.title;el('region').textContent=meta.region+' / Gimnasios low-cost';el('period').textContent=meta.period;el('target-description').textContent=meta.target_description;
-    el('baseline-description').textContent=meta.baseline_description;el('methodology').textContent=meta.methodology;el('revenue-method').textContent=meta.revenue_method;
+    el('baseline-description').textContent=meta.baseline_description;
+el('revenue-method').textContent=meta.revenue_method;
     el('business-formulas').replaceChildren(...(meta.business_formulas||[]).map(item=>{const row=document.createElement('li'),heading=document.createElement('strong'),equation=document.createElement('code'),detail=document.createElement('span');heading.textContent=item.label;equation.textContent=item.expression;detail.textContent=item.detail;row.append(heading,equation,detail);return row;}));
     if(meta.business_kpis?.length){
       el('business-summary').hidden=false;
@@ -112,7 +206,7 @@
       el('business-robustness-rows').innerHTML=meta.business_robustness?.length?meta.business_robustness.map(row=>`<tr><td>${escapeHtml(row.name)}</td><td>${fmt(row.appearances)} / ${fmt(row.total_scenarios)}</td><td>${fmt(row.average_position,1)}</td><td>${money(row.minimum_revenue_eur)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No hay resultados de sensibilidad para estos municipios.</td></tr>';
     }
     listItems('assumptions',meta.assumptions,'Sin supuestos documentados.');listItems('limitations',meta.limitations,'Sin limitaciones documentadas.');
-    el('sources').innerHTML=meta.sources.length?meta.sources.map(source=>safeLink(source.label,source.url)).join(''):'Sin fuentes documentadas.';
+
     el('selection-count').textContent=`${selected.length} municipios`;el('selection-revenue-label').textContent=`Facturacion anual estimada · ${selected.length} centros`;el('total-revenue').textContent=money(sumField(selected,'annual_revenue_eur'));el('candidate-count').textContent=fmt(rows.filter(row=>row.candidate).length);
     el('municipal-count').textContent=fmt(rows.length);el('target-count').textContent=fmt(sumField(rows,'target_population'));el('competition-count').textContent=fmt(DATA.competitors.length);
     el('selected-rows').innerHTML=selected.map((row,index)=>`<tr><td>${index+1}</td><td class="name"><button class="place" data-id="${escapeHtml(row.id)}">${escapeHtml(row.name)}</button><small>${escapeHtml(row.province)}</small></td><td>${fmt(row.demand_per_competitor)}</td><td class="money">${revenue(row)}</td><td class="reason">${escapeHtml(row.reason)}</td></tr>`).join('');
