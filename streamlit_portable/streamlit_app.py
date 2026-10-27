@@ -488,16 +488,12 @@ def build_study(
         "audit_source": audit_source,
         "market_checks": [],
         "simulation": {
-            "model": "equal_share",
+            "model": "economic_scenario",
             "penetration": params["penetracion"],
-            "annual_ticket_eur": params["ticket_mensual"] * 12,
-            "weights": {
-                "demand": 1.0,
-                "income": 1.0,
-                "growth": 1.0,
-                "opportunity": 0.0,
-            },
-            "target_profiles": [],
+            "monthly_ticket_eur": params["ticket_mensual"],
+            "maximum_market_share": params["cuota_max"],
+            "attractiveness": params["atractivo_nuevo"],
+            "annual_cost_eur": params["coste_anual_club"],
         },
         "finance": {
             "annual_fixed_cost_eur": params["coste_anual_club"],

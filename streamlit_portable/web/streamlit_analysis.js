@@ -5,287 +5,144 @@ const marketAnalysis = {
         const members = typeof ticket === 'number' && ticket > 0 ? Math.ceil(revenue / ticket) : null;
         return {revenue, members, exactMembers: members == null ? null : revenue / ticket, capacityExceeded: members != null && capacity != null && members > capacity};
     },
-   simulate(study, settings) {
-    const weights = {
-        population: Number(settings.weights.population),
-        income: Number(settings.weights.income),
-        growth: Number(settings.weights.growth),
-    };
+simulate(study, settings) {
+    const {
+        penetration,
+        monthlyTicket,
+        maximumMarketShare,
+        attractiveness,
+        annualCost
+    } = settings;
 
     if (
-        Object.values(weights).some(
-            value => !Number.isFinite(value) || value < 0
-        )
+        !Number.isFinite(penetration) ||
+        !Number.isFinite(monthlyTicket) ||
+        !Number.isFinite(maximumMarketShare) ||
+        !Number.isFinite(attractiveness) ||
+        !Number.isFinite(annualCost)
     ) {
         return {
-            error: 'Los pesos deben ser números no negativos.',
+            error: 'Los parámetros económicos no son válidos.'
         };
     }
 
-    if (Object.values(weights).every(value => value === 0)) {
+    if (
+        penetration < 0 ||
+        penetration > 1 ||
+        monthlyTicket < 0 ||
+        maximumMarketShare < 0 ||
+        maximumMarketShare > 1 ||
+        attractiveness <= 0 ||
+        annualCost < 0
+    ) {
         return {
-            error: 'Al menos uno de los pesos debe ser mayor que cero.',
+            error: 'Los parámetros económicos están fuera de rango.'
         };
     }
 
     /*
-     * Solo pueden entrar en K-means los municipios con las tres
-     * variables necesarias y población objetivo positiva.
+     * El clustering ya está hecho.
+     * El simulador económico trabaja únicamente
+     * con municipios candidatos del modelo.
      */
-    const usable = study.municipalities
-        .filter(row =>
-            Number.isFinite(row.target_population) &&
-            row.target_population > 0 &&
-            Number.isFinite(row.income_eur) &&
-            Number.isFinite(row.growth_pct)
-        )
-        .map(row => ({
-            ...row,
-            rawFeatures: [
-                Math.log1p(row.target_population),
-                row.income_eur,
-                row.growth_pct,
-            ],
-        }));
+    const candidates = study.municipalities
+        .filter(row => row.candidate)
+        .map(row => {
+            const competition =
+                Number(row.competitors_weighted);
 
-    if (usable.length < 4) {
-        return {
-            error: 'No hay suficientes municipios completos para formar cuatro clusters.',
-        };
-    }
+            const targetPopulation =
+                Number(row.target_population);
 
-    /*
-     * Media y desviación típica de cada variable.
-     */
-    const featureCount = 3;
-
-    const means = Array.from(
-        {length: featureCount},
-        (_, featureIndex) =>
-            usable.reduce(
-                (total, row) => total + row.rawFeatures[featureIndex],
-                0
-            ) / usable.length
-    );
-
-    const deviations = Array.from(
-        {length: featureCount},
-        (_, featureIndex) => {
-            const variance =
-                usable.reduce((total, row) => {
-                    const difference =
-                        row.rawFeatures[featureIndex] - means[featureIndex];
-
-                    return total + difference * difference;
-                }, 0) / usable.length;
-
-            return Math.sqrt(variance);
-        }
-    );
-
-    /*
-     * Para que los controles representen pesos de la distancia
-     * euclídea cuadrática, cada variable se multiplica por sqrt(peso).
-     *
-     * d² = wp·Δzp² + wr·Δzr² + wc·Δzc²
-     */
-    const weightVector = [
-        Math.sqrt(weights.population),
-        Math.sqrt(weights.income),
-        Math.sqrt(weights.growth),
-    ];
-
-    const points = usable.map(row => ({
-        ...row,
-        features: row.rawFeatures.map((value, featureIndex) => {
-            const deviation = deviations[featureIndex];
-
-            const standardized =
-                deviation === 0
-                    ? 0
-                    : (value - means[featureIndex]) / deviation;
-
-            return standardized * weightVector[featureIndex];
-        }),
-    }));
-
-    const squaredDistance = (left, right) =>
-        left.reduce((total, value, index) => {
-            const difference = value - right[index];
-            return total + difference * difference;
-        }, 0);
-
-    /*
-     * Inicialización determinista:
-     * 1. Primer centroide: municipio con menor código.
-     * 2. Siguientes centroides: punto más alejado de los ya elegidos.
-     *
-     * Evita que el resultado cambie aleatoriamente al mover un slider.
-     */
-    const sortedPoints = [...points].sort(
-        (left, right) => String(left.id).localeCompare(String(right.id))
-    );
-
-    const centroids = [[...sortedPoints[0].features]];
-
-    while (centroids.length < 4) {
-        let selectedPoint = null;
-        let selectedDistance = -1;
-
-        for (const point of sortedPoints) {
-            const nearestDistance = Math.min(
-                ...centroids.map(centroid =>
-                    squaredDistance(point.features, centroid)
-                )
-            );
-
-            if (nearestDistance > selectedDistance) {
-                selectedPoint = point;
-                selectedDistance = nearestDistance;
+            if (
+                !Number.isFinite(competition) ||
+                !Number.isFinite(targetPopulation) ||
+                targetPopulation <= 0
+            ) {
+                return null;
             }
-        }
 
-        centroids.push([...selectedPoint.features]);
-    }
+            /*
+             * 1. Demanda potencial
+             */
+            const potentialDemand =
+                targetPopulation * penetration;
 
-    let assignments = new Array(points.length).fill(-1);
-
-    /*
-     * Iteraciones de K-means.
-     */
-    for (let iteration = 0; iteration < 100; iteration++) {
-        const nextAssignments = points.map(point => {
-            let nearestCluster = 0;
-            let nearestDistance = Infinity;
-
-            centroids.forEach((centroid, clusterIndex) => {
-                const distance = squaredDistance(
-                    point.features,
-                    centroid
+            /*
+             * 2. Cuota capturable
+             */
+            const capturedShare =
+                Math.min(
+                    attractiveness /
+                        (competition + attractiveness),
+                    maximumMarketShare
                 );
 
-                if (distance < nearestDistance) {
-                    nearestDistance = distance;
-                    nearestCluster = clusterIndex;
-                }
-            });
+            /*
+             * 3. Socios potenciales
+             *
+             * NO se aplica:
+             *
+             * Math.min(potentialMembers, 2600)
+             */
+            const potentialMembers =
+                potentialDemand * capturedShare;
 
-            return nearestCluster;
-        });
+            /*
+             * 4. Facturación potencial anual
+             */
+            const scenarioRevenue =
+                potentialMembers *
+                monthlyTicket *
+                12;
 
-        const converged = nextAssignments.every(
-            (cluster, index) => cluster === assignments[index]
-        );
+            /*
+             * 5. Margen potencial anual
+             */
+            const scenarioMargin =
+                scenarioRevenue - annualCost;
 
-        assignments = nextAssignments;
-
-        const sums = Array.from(
-            {length: 4},
-            () => Array(featureCount).fill(0)
-        );
-
-        const counts = Array(4).fill(0);
-
-        points.forEach((point, pointIndex) => {
-            const cluster = assignments[pointIndex];
-            counts[cluster] += 1;
-
-            point.features.forEach((value, featureIndex) => {
-                sums[cluster][featureIndex] += value;
-            });
-        });
-
-        for (let cluster = 0; cluster < 4; cluster++) {
-            if (counts[cluster] === 0) {
-                continue;
-            }
-
-            centroids[cluster] = sums[cluster].map(
-                value => value / counts[cluster]
-            );
-        }
-
-        if (converged) {
-            break;
-        }
-    }
+            return {
+                ...row,
+                potentialDemand,
+                capturedShare,
+                potentialMembers,
+                scenarioRevenue,
+                scenarioMargin,
+                scenarioViable:
+                    scenarioMargin >= 0
+            };
+        })
+        .filter(Boolean);
 
     /*
-     * Presión competitiva:
-     * competencia ponderada / población objetivo × 10.000.
+     * Ordenamos por facturación potencial.
      */
-    const clustered = points.map((point, index) => ({
-        ...point,
-        scenarioCluster: assignments[index],
-        competitionRate:
-            Number.isFinite(point.competitors_weighted) &&
-            point.target_population > 0
-                ? (
-                    point.competitors_weighted /
-                    point.target_population
-                ) * 10000
-                : null,
-    }));
-
-    /*
-     * Media de presión competitiva dentro de cada cluster.
-     */
-    const clusterMeans = new Map();
-
-    for (let cluster = 0; cluster < 4; cluster++) {
-        const values = clustered
-            .filter(row => row.scenarioCluster === cluster)
-            .map(row => row.competitionRate)
-            .filter(value => Number.isFinite(value));
-
-        clusterMeans.set(
-            cluster,
-            values.length
-                ? values.reduce((total, value) => total + value, 0) /
-                  values.length
-                : null
-        );
-    }
-
-    /*
-     * Candidato si su presión competitiva es inferior a la media
-     * de su nuevo cluster.
-     */
-    const evaluated = clustered.map(row => {
-        const clusterMean = clusterMeans.get(row.scenarioCluster);
-
-        return {
-            ...row,
-            clusterMean,
-            scenarioCandidate:
-                Number.isFinite(row.competitionRate) &&
-                Number.isFinite(clusterMean) &&
-                row.competitionRate < clusterMean,
-        };
-    });
-
-    const candidates = evaluated.filter(
-        row => row.scenarioCandidate
-    );
-
-    /*
-     * Mantiene la facturación publicada por el módulo de negocio.
-     * El simulador cambia los clusters y la condición de candidato,
-     * pero no inventa otra fórmula económica.
-     */
-    const selection = candidates
-        .filter(row => Number.isFinite(row.annual_revenue_eur))
+    const selection = [...candidates]
         .sort(
             (left, right) =>
-                right.annual_revenue_eur - left.annual_revenue_eur ||
-                String(left.id).localeCompare(String(right.id))
+                right.scenarioRevenue -
+                    left.scenarioRevenue ||
+                String(left.id).localeCompare(
+                    String(right.id)
+                )
         )
         .slice(0, 5);
 
     const selectionTotal =
-        selection.length === 5
+        selection.length
             ? selection.reduce(
-                (total, row) => total + row.annual_revenue_eur,
+                (total, row) =>
+                    total + row.scenarioRevenue,
+                0
+            )
+            : null;
+
+    const marginTotal =
+        selection.length
+            ? selection.reduce(
+                (total, row) =>
+                    total + row.scenarioMargin,
                 0
             )
             : null;
@@ -293,10 +150,8 @@ const marketAnalysis = {
     return {
         selection,
         selectionTotal,
-        candidateCount: candidates.length,
-        excluded:
-            study.municipalities.length - usable.length,
-        clusterMeans,
+        marginTotal,
+        candidates: candidates.length
     };
 }
 };
@@ -382,114 +237,250 @@ if (typeof document !== 'undefined') {
     for (const id of ['fixed-cost', 'variable-cost', 'finance-ticket', 'capacity']) el(id).addEventListener('input', updateFinance);
     updateFinance();
 
-    const simulation = DATA.simulation;
+const simulation = DATA.simulation;
 
-    el('simulation-controls').hidden = !simulation;
-    el('simulation-empty').hidden = !!simulation;
-    el('reset-scenario').disabled = !simulation;
+el('reset-scenario').disabled = !simulation;
 
-    if (simulation) {
-        function resetSimulation() {
-            setValue('weight-demand', 1);
-            setValue('weight-income', 1);
-            setValue('weight-growth', 1);
+if (simulation) {
 
-            updateSimulation();
-        }
+    function resetSimulation() {
+        setValue(
+            'penetration',
+            simulation.penetration * 100
+        );
 
-        function updateSimulation() {
-            const weights = {
-                population: readNumber('weight-demand'),
-                income: readNumber('weight-income'),
-                growth: readNumber('weight-growth'),
-            };
+        setValue(
+            'monthly-ticket',
+            simulation.monthly_ticket_eur
+        );
 
-            el('weight-demand-value').textContent =
-                fmt(weights.population, 1);
+        setValue(
+            'maximum-share',
+            simulation.maximum_market_share * 100
+        );
 
-            el('weight-income-value').textContent =
-                fmt(weights.income, 1);
+        setValue(
+            'attractiveness',
+            simulation.attractiveness
+        );
 
-            el('weight-growth-value').textContent =
-                fmt(weights.growth, 1);
+        setValue(
+            'annual-cost',
+            simulation.annual_cost_eur
+        );
 
-            const result = marketAnalysis.simulate(
+        updateSimulation();
+    }
+
+
+    function updateSimulation() {
+        const penetration =
+            readNumber('penetration');
+
+        const monthlyTicket =
+            readNumber('monthly-ticket');
+
+        const maximumMarketShare =
+            readNumber('maximum-share');
+
+        const attractiveness =
+            readNumber('attractiveness');
+
+        const annualCost =
+            readNumber('annual-cost');
+
+
+        /*
+         * Actualizar etiquetas de los sliders
+         */
+        el('penetration-value').textContent =
+            penetration == null
+                ? 'n/d'
+                : fmt(penetration, 1) + ' %';
+
+        el('monthly-ticket-value').textContent =
+            monthlyTicket == null
+                ? 'n/d'
+                : fmt(monthlyTicket, 2) + ' €';
+
+        el('maximum-share-value').textContent =
+            maximumMarketShare == null
+                ? 'n/d'
+                : fmt(maximumMarketShare, 0) + ' %';
+
+        el('attractiveness-value').textContent =
+            attractiveness == null
+                ? 'n/d'
+                : fmt(attractiveness, 2);
+
+        el('annual-cost-value').textContent =
+            annualCost == null
+                ? 'n/d'
+                : money(annualCost);
+
+
+        /*
+         * Ejecutar escenario económico
+         */
+        const result =
+            marketAnalysis.simulate(
                 DATA,
-                {weights}
+                {
+                    penetration:
+                        penetration == null
+                            ? NaN
+                            : penetration / 100,
+
+                    monthlyTicket:
+                        monthlyTicket == null
+                            ? NaN
+                            : monthlyTicket,
+
+                    maximumMarketShare:
+                        maximumMarketShare == null
+                            ? NaN
+                            : maximumMarketShare / 100,
+
+                    attractiveness:
+                        attractiveness == null
+                            ? NaN
+                            : attractiveness,
+
+                    annualCost:
+                        annualCost == null
+                            ? NaN
+                            : annualCost
+                }
             );
 
-            if (result.error) {
-                el('scenario-message').textContent = result.error;
-                el('scenario-candidate-count').textContent = 'n/d';
-                el('scenario-total').textContent = 'n/d';
-                el('scenario-rows').innerHTML = '';
-                return;
-            }
 
-            el('scenario-candidate-count').textContent =
-                fmt(result.candidateCount);
-
+        /*
+         * Error
+         */
+        if (result.error) {
             el('scenario-total').textContent =
-                money(result.selectionTotal);
+                'n/d';
+
+            el('scenario-margin').textContent =
+                'n/d';
 
             el('scenario-message').textContent =
-                `${result.excluded} municipios excluidos por falta de ` +
-                `población, renta o crecimiento. ` +
-                `${result.candidateCount} municipios presentan una presión ` +
-                `competitiva inferior a la media de su cluster.`;
+                result.error;
 
-            el('scenario-rows').innerHTML = result.selection.length
+            el('scenario-rows').innerHTML =
+                '';
+
+            return;
+        }
+
+
+        /*
+         * KPIs
+         */
+        el('scenario-total').textContent =
+            money(result.selectionTotal);
+
+        el('scenario-margin').textContent =
+            money(result.marginTotal);
+
+        el('scenario-message').textContent =
+            `${result.candidates} municipios candidatos evaluados. ` +
+            `La simulación calcula potencial económico sin aplicar ` +
+            `el límite de 2.600 socios por centro.`;
+
+
+        /*
+         * Top 5
+         */
+        el('scenario-rows').innerHTML =
+            result.selection.length
                 ? result.selection
-                    .map((row, index) => `
-                        <tr>
-                            <td>${index + 1}</td>
+                    .map(
+                        (row, index) => `
+                            <tr>
 
-                            <td class="name">
-                                ${escapeHtml(row.name)}
-                            </td>
+                                <td>
+                                    ${index + 1}
+                                </td>
 
-                            <td>
-                                ${fmt(row.scenarioCluster)}
-                            </td>
+                                <td class="name">
+                                    ${escapeHtml(row.name)}
+                                </td>
 
-                            <td>
-                                ${fmt(row.competitionRate, 2)}
-                            </td>
+                                <td>
+                                    ${fmt(row.potentialMembers)}
+                                </td>
 
-                            <td>
-                                ${fmt(row.clusterMean, 2)}
-                            </td>
+                                <td>
+                                    ${fmt(
+                                        row.capturedShare * 100,
+                                        1
+                                    )} %
+                                </td>
 
-                            <td>
-                                ${money(row.annual_revenue_eur)}
-                            </td>
-                        </tr>
-                    `)
+                                <td>
+                                    ${money(
+                                        row.scenarioRevenue
+                                    )}
+                                </td>
+
+                                <td>
+                                    ${money(
+                                        row.scenarioMargin
+                                    )}
+                                    <small>
+                                        ${
+                                            row.scenarioViable
+                                                ? 'Margen positivo'
+                                                : 'Margen negativo'
+                                        }
+                                    </small>
+                                </td>
+
+                            </tr>
+                        `
+                    )
                     .join('')
                 : `
                     <tr>
-                        <td colspan="6" class="empty">
-                            No hay municipios seleccionables con estos pesos.
+                        <td
+                          colspan="6"
+                          class="empty">
+                            No hay candidatos calculables.
                         </td>
                     </tr>
                 `;
-        }
-
-        for (const id of [
-            'weight-demand',
-            'weight-income',
-            'weight-growth',
-        ]) {
-            el(id).addEventListener('input', updateSimulation);
-        }
-
-        el('reset-scenario').addEventListener(
-            'click',
-            resetSimulation
-        );
-
-        resetSimulation();
     }
+
+
+    /*
+     * Eventos
+     */
+    for (const id of [
+        'penetration',
+        'monthly-ticket',
+        'maximum-share',
+        'attractiveness',
+        'annual-cost'
+    ]) {
+        el(id).addEventListener(
+            'input',
+            updateSimulation
+        );
+    }
+
+
+    el('reset-scenario').addEventListener(
+        'click',
+        resetSimulation
+    );
+
+
+    /*
+     * Estado inicial = escenario central
+     */
+    resetSimulation();
+}
 
     const sections = DATA.census_sections?.features || [], isochrones = DATA.isochrones?.features || [];
     const hasSpatial = sections.length + isochrones.length > 0;

@@ -870,195 +870,177 @@
 
       <!-- ========== NUEVO SIMULADOR K-MEANS ========== -->
 
-      <section class="analysis-band">
+<section class="analysis-band">
 
-        <div class="section-heading">
+  <div class="section-heading">
+    <h2>Simulador económico</h2>
 
-          <h2>
-            Simulador de sensibilidad del modelo
-          </h2>
+    <button
+      class="icon"
+      id="reset-scenario"
+      type="button"
+      title="Restaurar escenario central"
+      aria-label="Restaurar escenario central">
+      <i data-lucide="rotate-ccw"></i>
+    </button>
+  </div>
 
-          <button
-            class="icon"
-            id="reset-scenario"
-            type="button"
-            title="Restaurar pesos 1:1:1"
-            aria-label="Restaurar pesos 1:1:1">
-            <i data-lucide="rotate-ccw"></i>
-          </button>
+  <p class="caption">
+    Modifica los principales supuestos económicos y observa cómo cambia
+    el potencial de los municipios candidatos identificados previamente
+    por el modelo.
+  </p>
 
-        </div>
+  <div id="simulation-controls">
 
-        <p
-          id="simulation-empty"
-          class="caption">
-          Configuración de simulación no disponible.
-        </p>
+    <div class="controls-grid">
 
-        <div
-          id="simulation-controls"
-          hidden>
+      <label>
+        <span class="control-title">
+          Penetración
+          <output id="penetration-value">21,8 %</output>
+        </span>
 
-          <p class="caption">
-            Modifica la importancia relativa de las tres variables
-            utilizadas en el clustering. El escenario central utiliza
-            pesos <strong>1 : 1 : 1</strong>.
-          </p>
-
-          <div class="controls-grid">
-
-            <label>
-
-              <span class="control-title">
-                Peso: población objetivo
-                <output id="weight-demand-value">
-                  1,0
-                </output>
-              </span>
-
-              <input
-                id="weight-demand"
-                type="range"
-                min="0"
-                max="3"
-                step="0.1"
-                value="1">
-
-            </label>
+        <input
+          id="penetration"
+          type="range"
+          min="5"
+          max="40"
+          step="0.1">
+      </label>
 
 
-            <label>
+      <label>
+        <span class="control-title">
+          Precio mensual
+          <output id="monthly-ticket-value">22,37 €</output>
+        </span>
 
-              <span class="control-title">
-                Peso: renta
-                <output id="weight-income-value">
-                  1,0
-                </output>
-              </span>
-
-              <input
-                id="weight-income"
-                type="range"
-                min="0"
-                max="3"
-                step="0.1"
-                value="1">
-
-            </label>
+        <input
+          id="monthly-ticket"
+          type="range"
+          min="10"
+          max="50"
+          step="0.1">
+      </label>
 
 
-            <label>
+      <label>
+        <span class="control-title">
+          Cuota máxima capturable
+          <output id="maximum-share-value">40 %</output>
+        </span>
 
-              <span class="control-title">
-                Peso: crecimiento
-                <output id="weight-growth-value">
-                  1,0
-                </output>
-              </span>
-
-              <input
-                id="weight-growth"
-                type="range"
-                min="0"
-                max="3"
-                step="0.1"
-                value="1">
-
-            </label>
-
-          </div>
+        <input
+          id="maximum-share"
+          type="range"
+          min="5"
+          max="80"
+          step="1">
+      </label>
 
 
-          <div
-            class="method-main-equation"
-            role="math"
-            aria-label="Distancia cuadrática ponderada">
+      <label>
+        <span class="control-title">
+          Atractivo del nuevo centro
+          <output id="attractiveness-value">2,18</output>
+        </span>
 
-            d² =
-
-            w<sub>p</sub> ·
-            (Δz<sub>p</sub>)²
-
-            +
-
-            w<sub>r</sub> ·
-            (Δz<sub>r</sub>)²
-
-            +
-
-            w<sub>c</sub> ·
-            (Δz<sub>c</sub>)²
-
-          </div>
+        <input
+          id="attractiveness"
+          type="range"
+          min="0.1"
+          max="5"
+          step="0.01">
+      </label>
 
 
-          <p class="caption">
-            Al cambiar los pesos se vuelve a ejecutar K-means con
-            k = 4 sobre población objetivo, renta y crecimiento
-            estandarizados. Después se compara la presión competitiva
-            de cada municipio con la media de su nuevo cluster para
-            identificar candidatos. La simulación no modifica la
-            recomendación oficial publicada.
-          </p>
+      <label>
+        <span class="control-title">
+          Coste anual
+          <output id="annual-cost-value">556.000 €</output>
+        </span>
+
+        <input
+          id="annual-cost"
+          type="range"
+          min="200000"
+          max="1000000"
+          step="5000">
+      </label>
+
+    </div>
 
 
-          <div class="scenario-summary">
-
-            <div>
-              <strong id="scenario-candidate-count">
-                n/d
-              </strong>
-
-              <span>
-                Candidatos en el escenario
-              </span>
-            </div>
-
-            <div>
-              <strong id="scenario-total">
-                n/d
-              </strong>
-
-              <span>
-                Facturación estimada · Top 5 del escenario
-              </span>
-            </div>
-
-          </div>
+    <div class="method-main-equation">
+      Facturación potencial anual =
+      población objetivo × penetración × cuota captada
+      × precio mensual × 12
+    </div>
 
 
-          <p
-            class="caption"
-            id="scenario-message"
-            role="status">
-          </p>
+    <div class="method-main-equation">
+      Cuota captada =
+      mínimo(
+      atractivo ÷ (competencia ponderada + atractivo),
+      cuota máxima
+      )
+    </div>
 
 
-          <div class="table-wrap">
+    <p class="caption">
+      Este simulador no aplica el límite operativo de 2.600 socios.
+      La facturación representa potencial de mercado y no la capacidad
+      física realizable por un único centro.
+    </p>
 
-            <table>
 
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th class="name">Municipio</th>
-                  <th>Cluster</th>
-                  <th>Presión competitiva</th>
-                  <th>Media del cluster</th>
-                  <th>Facturación anual</th>
-                </tr>
-              </thead>
+    <div class="scenario-summary">
 
-              <tbody id="scenario-rows"></tbody>
+      <div>
+        <strong id="scenario-total">n/d</strong>
+        <span>Facturación potencial · Top 5</span>
+      </div>
 
-            </table>
+      <div>
+        <strong id="scenario-margin">n/d</strong>
+        <span>Margen potencial · Top 5</span>
+      </div>
 
-          </div>
+    </div>
 
-        </div>
 
-      </section>
+    <p
+      class="caption"
+      id="scenario-message"
+      role="status">
+    </p>
 
+
+    <div class="table-wrap">
+
+      <table>
+
+        <thead>
+          <tr>
+            <th>#</th>
+            <th class="name">Municipio</th>
+            <th>Socios potenciales</th>
+            <th>Cuota captada</th>
+            <th>Facturación potencial</th>
+            <th>Margen potencial</th>
+          </tr>
+        </thead>
+
+        <tbody id="scenario-rows"></tbody>
+
+      </table>
+
+    </div>
+
+  </div>
+
+</section>
 
       <!-- CONTROL COMPETENCIA -->
 
