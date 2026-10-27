@@ -327,6 +327,7 @@ def resumir_estrategia(nombre, seleccion):
             if "viable" in seleccion else 0
         ),
         "facturacion_operativa_total_eur": suma("facturacion_anual"),
+        "coste_anual_escalado_total_eur": suma("coste_anual_escalado"),
         "margen_operativo_total_eur": suma("margen_eur"),
         "perdidas_operativas_totales_eur": suma("perdidas_eur"),
         "potencial_anual_sin_tope_eur": suma("facturacion_sin_tope_capacidad"),
@@ -355,12 +356,16 @@ def seccion_referencia_operativa(parametros_centrales):
     coste = parametros_centrales["coste_anual_club"]
 
     facturacion_referencia = capacidad * ticket * 12
-    socios_equilibrio = coste / (ticket * 12)
+    ingresos_netos_por_socio = ticket * 12 - 0.4 * coste / capacidad
+    socios_equilibrio = 0.6 * coste / ingresos_netos_por_socio
 
     return "\n".join([
         "## Referencia operativa",
         "",
-        f"- Costes operativos anuales considerados: {fmt_eur(coste)}.",
+        f"- Coste anual de referencia: {fmt_eur(coste)} para "
+        f"{fmt_entero(capacidad)} socios captables.",
+        "- Coste escalado por municipio: coste de referencia × "
+        "(0,6 + 0,4 × socios captables / capacidad de referencia).",
         f"- Ticket mensual sin IVA: {formato_numero(ticket, 2)} €.",
         f"- Punto de equilibrio aproximado: {fmt_entero(socios_equilibrio)} socios.",
         f"- Capacidad de referencia de un centro estándar: {fmt_entero(capacidad)} socios.",
@@ -368,10 +373,11 @@ def seccion_referencia_operativa(parametros_centrales):
         f"{fmt_eur(facturacion_referencia)} al año.",
         "",
         "La capacidad de referencia no es la capacidad óptima calculada para cada "
-        "municipio. Sirve para comparar todos los municipios con el mismo formato "
-        "de centro. El **potencial anual sin tope** muestra el valor de la demanda "
-        "captable; cuando supera ampliamente la referencia, conviene estudiar un "
-        "centro mayor o varias aperturas y recalcular sus costes.",
+        "municipio. El coste anual y el margen se estiman con los socios captables "
+        "y la facturación sin límite de capacidad. El **potencial anual sin tope** "
+        "muestra el valor de la demanda captable; cuando supera ampliamente la "
+        "referencia, conviene estudiar un centro mayor o varias aperturas y "
+        "recalcular sus costes.",
     ])
 
 
@@ -381,7 +387,8 @@ def seccion_comparacion(comparacion):
         ("centros_seleccionados", "Municipios seleccionados", fmt_entero),
         ("centros_viables", "Municipios viables", fmt_entero),
         ("facturacion_operativa_total_eur", "Facturación operativa total", fmt_eur),
-        ("margen_operativo_total_eur", "Margen operativo total", fmt_eur),
+        ("coste_anual_escalado_total_eur", "Coste anual escalado total", fmt_eur),
+        ("margen_operativo_total_eur", "Margen escalado total", fmt_eur),
         ("perdidas_operativas_totales_eur", "Pérdidas operativas", fmt_eur),
         ("potencial_anual_sin_tope_eur", "Potencial anual sin tope", fmt_eur),
         ("demanda_media_por_competidor", "Demanda media por competidor", fmt_dec1),
@@ -407,9 +414,10 @@ ESPEC_MODELO = [
     ("media_cluster_comp_per_10k", "Media del cluster", fmt_dec2),
     ("socios_captables", "Socios captables", fmt_entero),
     ("facturacion_sin_tope_capacidad", "Potencial anual sin tope", fmt_eur),
+    ("coste_anual_escalado", "Coste anual escalado", fmt_eur),
     ("ratio_capacidad", "Ratio de capacidad", fmt_ratio),
     ("facturacion_anual", "Facturación operativa", fmt_eur),
-    ("margen_eur", "Margen operativo", fmt_eur),
+    ("margen_escalado_eur", "Margen escalado", fmt_eur),
     ("colchon_demanda_pct", "Colchón de demanda", fmt_pct_fraccion),
     ("weighted_observed_vs_expected_pct", "Cobertura ponderada", fmt_pct),
     ("quality_status", "Calidad del dato", fmt_texto),
@@ -552,7 +560,8 @@ def seccion_baseline(baseline):
         ("quality_flag", "Supera calidad", fmt_bool),
         ("facturacion_anual", "Facturación operativa", fmt_eur),
         ("facturacion_sin_tope_capacidad", "Potencial anual sin tope", fmt_eur),
-        ("margen_eur", "Margen operativo", fmt_eur),
+        ("coste_anual_escalado", "Coste anual escalado", fmt_eur),
+        ("margen_escalado_eur", "Margen escalado", fmt_eur),
         ("weighted_observed_vs_expected_pct", "Cobertura ponderada", fmt_pct),
     ]
     tabla, _ = tabla_desde_df(baseline, especificacion)
@@ -624,7 +633,7 @@ def seccion_conclusion(comparacion, modelo, sustituciones):
         f"municipios viables de {fmt_entero(mod['centros_seleccionados'])}, frente a "
         f"{fmt_entero(base['centros_viables'])} de "
         f"{fmt_entero(base['centros_seleccionados'])} en el baseline.",
-        f"- **Margen operativo total:** {fmt_eur(mod['margen_operativo_total_eur'])} "
+        f"- **Margen escalado total:** {fmt_eur(mod['margen_operativo_total_eur'])} "
         f"frente a {fmt_eur(base['margen_operativo_total_eur'])} "
         f"(diferencia de {fmt_eur(diferencia_margen)}).",
         f"- **Pérdidas evitadas:** el baseline acumula "
@@ -820,6 +829,31 @@ def validar_resultados_centrales(evaluacion, selecciones, detalle, frecuencias):
         < evaluacion["facturacion_anual"]
     ).any():
         raise ValueError("El potencial sin tope no puede ser inferior a la facturación operativa.")
+
+    parametros_centrales = parametros("central")
+    coste_esperado = parametros_centrales["coste_anual_club"] * (
+        0.6
+        + 0.4
+        * evaluacion["socios_captables"]
+        / parametros_centrales["capacidad"]
+    )
+    if not np.allclose(
+        evaluacion["coste_anual_escalado"],
+        coste_esperado,
+        rtol=1e-10,
+        atol=1e-6,
+    ):
+        raise ValueError("El coste anual escalado no coincide con la fórmula definida.")
+    margen_esperado = (
+        evaluacion["facturacion_sin_tope_capacidad"] - coste_esperado
+    )
+    if not np.allclose(
+        evaluacion["margen_escalado_eur"],
+        margen_esperado,
+        rtol=1e-10,
+        atol=1e-6,
+    ):
+        raise ValueError("El margen escalado no coincide con la fórmula definida.")
 
     bajo_capacidad = evaluacion["ratio_capacidad"].le(1)
     if not np.allclose(

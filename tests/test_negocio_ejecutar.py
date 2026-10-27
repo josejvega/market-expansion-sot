@@ -8,6 +8,67 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 
 from src.negocio import ejecutar
+from src.negocio.supuestos import parametros
+from src.negocio.valor_negocio import viabilidad
+
+
+class ViabilidadNegocioTests(unittest.TestCase):
+    def test_scales_cost_and_margin_using_capturable_members(self):
+        parameters = parametros("central")
+        capturable_members = pd.Series([1500.0, 4261.0])
+        annual_revenue_per_member = parameters["ticket_mensual"] * 12
+        uncapped_revenue = capturable_members * annual_revenue_per_member
+        capped_members = capturable_members.clip(upper=parameters["capacidad"])
+        evaluation = pd.DataFrame(
+            {
+                "socios_captables": capturable_members,
+                "facturacion_sin_tope_capacidad": uncapped_revenue,
+                "facturacion_anual": capped_members * annual_revenue_per_member,
+            }
+        )
+
+        result = viabilidad(evaluation, parameters)
+
+        expected_cost = parameters["coste_anual_club"] * (
+            0.6
+            + 0.4 * capturable_members / parameters["capacidad"]
+        )
+        expected_margin = uncapped_revenue - expected_cost
+        pd.testing.assert_series_equal(
+            result["coste_anual_escalado"],
+            expected_cost.rename("coste_anual_escalado"),
+        )
+        pd.testing.assert_series_equal(
+            result["margen_escalado_eur"],
+            expected_margin.rename("margen_escalado_eur"),
+        )
+        self.assertEqual(result["viable"].tolist(), [False, True])
+        self.assertTrue(
+            (result["margen_eur"] == result["margen_escalado_eur"]).all()
+        )
+
+    def test_break_even_uses_the_scaled_cost_formula(self):
+        parameters = parametros("central")
+        evaluation = pd.DataFrame(
+            {
+                "socios_captables": [2000.0],
+                "facturacion_sin_tope_capacidad": [
+                    2000.0 * parameters["ticket_mensual"] * 12
+                ],
+                "facturacion_anual": [
+                    2000.0 * parameters["ticket_mensual"] * 12
+                ],
+            }
+        )
+
+        result = viabilidad(evaluation, parameters)
+        break_even_members = result["socios_break_even"].iloc[0]
+        break_even_revenue = break_even_members * parameters["ticket_mensual"] * 12
+        break_even_cost = parameters["coste_anual_club"] * (
+            0.6 + 0.4 * break_even_members / parameters["capacidad"]
+        )
+
+        self.assertAlmostEqual(break_even_revenue, break_even_cost)
 
 
 class CargarDatosNegocioTests(unittest.TestCase):

@@ -143,15 +143,30 @@ def facturacion(df, p, regla="C"):
 
 def viabilidad(df, p):
     out = df.copy()
-    out["umbral_facturacion"] = p["coste_anual_club"]
-    out["socios_break_even"] = p["coste_anual_club"] / (p["ticket_mensual"] * 12)
+    coste_base = p["coste_anual_club"]
+    capacidad = p["capacidad"]
+    out["coste_anual_escalado"] = coste_base * (
+        0.6 + 0.4 * out["socios_captables"] / capacidad
+    )
+    out["umbral_facturacion"] = out["coste_anual_escalado"]
+    ingresos_anuales_por_socio = p["ticket_mensual"] * 12
+    coste_variable_por_socio = 0.4 * coste_base / capacidad
+    ingresos_netos_por_socio = ingresos_anuales_por_socio - coste_variable_por_socio
+    if ingresos_netos_por_socio <= 0:
+        raise ValueError(
+            "El ticket anual debe superar el coste variable anual por socio."
+        )
+    out["socios_break_even"] = 0.6 * coste_base / ingresos_netos_por_socio
     ratio_break_even = np.divide(
         out["socios_break_even"], out["socios_captables"],
         out=np.full(len(out), np.nan, dtype="float64"),
         where=out["socios_captables"].to_numpy(dtype="float64") != 0,
     )
     out["colchon_demanda_pct"] = 1 - ratio_break_even
-    out["margen_eur"] = out["facturacion_anual"] - p["coste_anual_club"]
+    out["margen_escalado_eur"] = (
+        out["facturacion_sin_tope_capacidad"] - out["coste_anual_escalado"]
+    )
+    out["margen_eur"] = out["margen_escalado_eur"]
     out["perdidas_eur"] = (-out["margen_eur"]).clip(lower=0)   # pérdidas operativas estimadas
     out["viable"] = out["margen_eur"] >= 0
     return out
