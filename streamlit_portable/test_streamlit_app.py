@@ -183,7 +183,7 @@ class Portable2DashboardTests(unittest.TestCase):
         )
         comparison = pd.DataFrame(
             {
-                "estrategia": ["Baseline", "Modelo A oficial"],
+                "estrategia": ["Baseline", "Modelo"],
                 "centros_seleccionados": [5, 5],
                 "centros_viables": [3, 5],
                 "facturacion_operativa_total_eur": [2500000.0, 3400000.0],

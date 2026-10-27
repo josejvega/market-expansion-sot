@@ -77,7 +77,7 @@ def build_study(
         business_comparison = business_outputs["comparison"].set_index("estrategia")
         for strategy_key, label in (
             ("Baseline", "Baseline"),
-            ("Modelo A oficial", "Modelo"),
+            ("Modelo", "Modelo"),
         ):
             summary = business_comparison.loc[strategy_key]
             business_kpis.append(

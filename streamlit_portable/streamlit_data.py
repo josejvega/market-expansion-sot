@@ -596,6 +596,9 @@ def load_business_outputs(
         raise ValueError("La selección de negocio no puede superar cinco municipios.")
 
     comparison = tables["comparison"]
+    comparison["estrategia"] = comparison["estrategia"].replace(
+        {"Modelo A oficial": "Modelo"}
+    )
     legacy_comparison_columns = {
         "facturacion_anual_total_con_tope_eur": "facturacion_operativa_total_eur",
         "margen_operativo_anual_total_eur": "margen_operativo_total_eur",
@@ -625,10 +628,10 @@ def load_business_outputs(
             "estrategia debe ser única y no nula."
         )
     comparison_rows = comparison.set_index("estrategia")
-    if not {"Baseline", "Modelo A oficial"}.issubset(comparison_rows.index):
+    if not {"Baseline", "Modelo"}.issubset(comparison_rows.index):
         raise ValueError(
             f"Salida de negocio {BUSINESS_OUTPUTS['comparison']}: "
-            "debe contener las estrategias Baseline y Modelo A oficial."
+            "debe contener las estrategias Baseline y Modelo."
         )
     for column in required_columns["comparison"] - {"estrategia"}:
         values = pd.to_numeric(comparison[column], errors="raise")

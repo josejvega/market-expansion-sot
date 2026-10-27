@@ -339,7 +339,7 @@ class BusinessOutputsTests(unittest.TestCase):
         )
         self.assertEqual(
             tables["comparison"]["estrategia"].tolist(),
-            ["Baseline", "Modelo A oficial"],
+            ["Baseline", "Modelo"],
         )
         self.assertEqual(tables["robustness"].loc[0, "apariciones"], 67)
 
@@ -442,6 +442,47 @@ class BusinessOutputsTests(unittest.TestCase):
             tables["comparison"].columns,
         )
         self.assertIn("margen_operativo_total_eur", tables["comparison"].columns)
+
+    def test_normalizes_business_strategy_label_to_modelo(self) -> None:
+        with TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            self._table("04001", "Abla").to_csv(
+                output_dir / BUSINESS_OUTPUTS["selection"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+            pd.concat(
+                [
+                    self._table(f"0400{index}", f"Municipio {index}")
+                    for index in range(1, 6)
+                ],
+                ignore_index=True,
+            ).to_csv(
+                output_dir / BUSINESS_OUTPUTS["baseline"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+            comparison = self._comparison().replace(
+                {"estrategia": {"Modelo A oficial": "Modelo"}}
+            )
+            comparison.to_csv(
+                output_dir / BUSINESS_OUTPUTS["comparison"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+            self._robustness().to_csv(
+                output_dir / BUSINESS_OUTPUTS["robustness"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+
+            with patch(
+                "streamlit_data.get_storage_settings",
+                return_value=SimpleNamespace(bucket_name=None, region_name=None),
+            ):
+                tables, _ = load_business_outputs(output_dir)
+
+        self.assertIn("Modelo", tables["comparison"]["estrategia"].tolist())
 
     def test_requires_s3_bucket_for_manual_competitor_audit(self) -> None:
         with patch(
