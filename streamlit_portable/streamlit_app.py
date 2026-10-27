@@ -167,16 +167,29 @@ def build_study(
             "repositorio. Las cifras económicas son escenarios, no previsiones."
         ),
         "methodology": (
-            "K-means agrupa municipios comparables usando log(1 + población de "
-            "18–50 años), renta neta media por persona y crecimiento de la "
-            "población total; las variables se estandarizan antes de calcular "
-            "distancias. Se probaron inercia y silhouette y se fijó k = 4 en "
-            "el notebook. Después, el modelo de negocio pondera la oferta "
-            "observada y compara la competencia por cada 10.000 personas de "
-            "18–50 años con la media del cluster. La selección final filtra "
-            "candidatos por viabilidad y calidad del dato, y ordena por "
-            "facturación estimada con capacidad."
-        ),
+    "1 · AGRUPACIÓN DE MUNICIPIOS COMPARABLES\n\n"
+    "K-means (k = 4) utilizando tres variables:\n\n"
+    "x₁ = log(1 + Población 18–50)\n"
+    "x₂ = Renta neta media por persona\n"
+    "x₃ = Crecimiento de la población\n\n"
+    "Las variables se estandarizan antes de calcular las distancias:\n"
+    "z = (x − μ) / σ\n\n"
+    "2 · PRESIÓN COMPETITIVA\n\n"
+    "Calculamos la competencia ponderada de cada municipio:\n"
+    "Cᵢ = Gimnasios + 0,1 × Otras instalaciones deportivas\n\n"
+    "y la normalizamos por el tamaño del público objetivo:\n"
+    "Dᵢ = (Cᵢ / Población 18–50ᵢ) × 10.000\n\n"
+    "Dᵢ representa los competidores ponderados por cada 10.000 "
+    "personas de 18–50 años.\n\n"
+    "3 · IDENTIFICACIÓN DE OPORTUNIDADES\n\n"
+    "Cada municipio se compara con la media de su propio cluster:\n"
+    "Dᵢ < D̄cluster(i)\n\n"
+    "Menor presión competitiva que la media de su cluster → "
+    "candidato potencial.\n\n"
+    "Finalmente, los candidatos se filtran por viabilidad y calidad "
+    "del dato y se ordenan por facturación anual estimada, considerando "
+    "la capacidad del centro."
+),
         "business_formulas": [
             {
                 "label": "Competencia ponderada",

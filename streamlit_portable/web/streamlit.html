@@ -24,9 +24,16 @@
       <div class="decision"><div class="map-shell"><h2>Seleccion frente a baseline</h2><div id="map" aria-label="Seleccion, baseline, candidatas y competencia"></div><div class="map-key"><span><i class="dot"></i>Seleccion 1-5</span><span><i class="dot baseline"></i>Baseline B1-B5</span></div></div><section><h2>Cinco ubicaciones propuestas</h2><div class="table-wrap"><table><thead><tr><th>#</th><th class="name">Municipio</th><th>Demanda /<br>competidor</th><th>Facturacion<br>anual por centro</th><th class="name">Motivo</th></tr></thead><tbody id="selected-rows"></tbody></table></div><p class="caption">Demanda por competidor: abonados potenciales. Las cifras son estimaciones, no intervalos de confianza.</p></section></div>
       <p class="notice" id="selection-note"></p>
       <section class="comparison"><h2>Comparacion con baseline</h2><p id="baseline-description" class="caption"></p><div class="comparison-grid"><div><div class="table-wrap"><table><thead><tr><th>Lista</th><th>Demanda /<br>competidor media</th><th>Facturacion anual<br>de cinco centros</th></tr></thead><tbody id="comparison-rows"></tbody></table></div><p class="caption" id="changes"></p></div><div><h3>Baseline</h3><div class="table-wrap"><table><thead><tr><th>Municipio</th><th>Demanda /<br>competidor</th><th>Facturacion anual<br>por centro</th></tr></thead><tbody id="baseline-rows"></tbody></table></div></div></div><p class="caption">Totales: suma de las cifras entregadas por centro. Si falta una estimacion, no se presenta un total parcial. La suma de limites no es un intervalo de confianza conjunto.</p></section>
-      <section class="analysis-band"><h2>Punto de equilibrio operativo</h2><p class="formula-note">Facturacion minima = Costes fijos anuales / (1 - Proporcion de costes variables)</p>
+      <section class="analysis-band"><h2>Punto de equilibrio operativo</h2>
+        <div class="estimate-equation" role="math" aria-label="Facturación mínima anual igual a costes fijos anuales dividido entre uno menos el porcentaje de costes variables sobre ventas">
+          <span class="equation-label">Facturación mínima anual =</span>
+          <span class="fraction"><span class="numerator">Costes fijos anuales</span><span class="denominator">1 − porcentaje de costes variables sobre ventas</span></span>
+        </div>
+        <p class="caption">Abonados para cubrir costes = facturación mínima anual ÷ cuota anual por abonado.</p>
         <div class="controls-grid"><label>Costes fijos anuales (EUR)<input id="fixed-cost" type="number" min="0" step="1000" placeholder="Sin dato"></label><label>Costes variables (% de ventas)<input id="variable-cost" type="number" min="0" max="100" step="1" placeholder="Sin dato"></label><label>Cuota anual por abonado (EUR)<input id="finance-ticket" type="number" min="0" step="0.01" placeholder="Sin dato"></label><label>Capacidad maxima (abonados)<input id="capacity" type="number" min="0" step="1" placeholder="Sin dato"></label></div>
-        <div class="scenario-summary"><div><strong id="breakeven-revenue">n/d</strong><span>Facturacion anual minima</span></div><div><strong id="breakeven-members">n/d</strong><span>Abonados para cubrir costes</span></div></div><p class="caption" id="capacity-note"></p>
+        <div class="scenario-summary"><div><strong id="breakeven-revenue">n/d</strong><span>Facturacion anual minima</span></div><div><strong id="breakeven-members">n/d</strong><span>Abonados para cubrir costes</span></div></div>
+        <svg id="breakeven-chart" class="breakeven-chart" role="img" aria-label="Gráfica del punto de equilibrio"></svg>
+        <p class="caption" id="profitability-answer" role="status"></p><p class="caption" id="capacity-note"></p>
       </section>
       <section class="analysis-band"><h2>Preguntas del cliente</h2>
         <details class="question" open><summary>Cuantos de los municipios sin competencia lo estan realmente?</summary><p id="competition-answer"></p><ul id="market-checks"></ul></details>
@@ -38,15 +45,7 @@
       <div class="stats"><div><strong id="municipal-count"></strong><span>Municipios del estudio</span></div><div><strong id="target-count"></strong><span>Personas objetivo</span></div><div><strong id="competition-count"></strong><span>Competidores geolocalizados entregados</span></div></div>
       <h2>Renta y crecimiento de cada municipio</h2>__MARKET__
       <div class="section-heading"><h2>Mercado municipal</h2><a id="municipal-download" class="icon" download="municipalities.csv" title="Descargar tabla municipal" aria-label="Descargar tabla municipal"><i data-lucide="download"></i></a></div>
-      <div class="table-wrap municipal-scroll"><table><thead><tr><th>Municipio</th><th>Publico objetivo</th><th>Crecimiento<br>5 anos (%)</th><th>Renta neta anual<br>por persona</th><th>Plazas<br>turisticas</th><th>Competidores</th><th>Por 10.000<br>objetivo</th></tr></thead><tbody id="municipal-rows"></tbody></table></div>
-      <section class="analysis-band"><h2>Secciones censales y areas de influencia</h2><div class="controls-grid">
-        <label>Municipio<select id="spatial-city"><option value="all">Todos los municipios</option></select></label>
-        <label>Desplazamiento<select id="travel-mode"><option value="all">Todos</option><option value="walk">A pie</option><option value="bike">Bicicleta</option><option value="drive">Coche</option></select></label>
-        <label>Tiempo de viaje<select id="travel-minutes"><option value="all">Todos los tiempos</option></select></label>
-        <label class="check"><input id="show-sections" type="checkbox" checked>Secciones censales</label><label class="check"><input id="show-isochrones" type="checkbox" checked>Isocronas</label>
-      </div><p id="spatial-empty">Secciones censales e isocronas no aportadas en esta entrega.</p><div id="spatial-map" aria-label="Secciones censales e isocronas" hidden></div><p class="caption" id="spatial-status"></p>
-        <div class="table-wrap"><table><thead><tr><th>Seccion</th><th class="name">Municipio</th><th>Publico objetivo</th><th>Renta anual / persona</th><th>Competidores</th></tr></thead><tbody id="section-rows"></tbody></table></div>
-      </section>
+      <div class="table-wrap municipal-scroll"><table><thead><tr><th>Municipio</th><th>Publico objetivo</th><th>Crecimiento<br>5 anos (%)</th><th>Renta neta anual<br>por persona</th><th>Competidores</th><th>Por 10.000<br>objetivo</th></tr></thead><tbody id="municipal-rows"></tbody></table></div>
     </section>
     <section id="intelligence" role="tabpanel" aria-labelledby="tab-intelligence" hidden>
       <div class="intelligence"><section><h2>Metodo del estudio</h2><p class="method-copy" id="methodology"></p></section><section><h2>Oferta por grupo</h2><p class="caption">Competidores por 10.000 personas objetivo · media de los municipios con datos</p><div id="groups"></div><p class="caption" id="group-note"></p></section></div>
@@ -67,14 +66,12 @@
       <section class="analysis-band"><div class="section-heading"><h2>Simulador de escenarios</h2><button class="icon" id="reset-scenario" title="Restaurar parametros" aria-label="Restaurar parametros"><i data-lucide="rotate-ccw"></i></button></div>
         <p id="simulation-empty" class="caption">Configuracion de simulacion no aportada en esta entrega.</p>
         <div id="simulation-controls" hidden><div class="controls-grid">
-          <label>Publico objetivo<select id="target-profile"><option value="current">Publico del estudio</option></select></label>
           <label><span class="control-title">Tamano del publico<output id="target-scale-value"></output></span><input id="target-scale" type="range" min="25" max="200" step="5" value="100"></label>
           <label>Penetracion (%)<input id="penetration" type="number" min="0" max="100" step="0.5"></label>
           <label>Cuota anual (EUR)<input id="scenario-ticket" type="number" min="0" step="0.01"></label>
           <label><span class="control-title">Peso: demanda<output id="weight-demand-value"></output></span><input id="weight-demand" type="range" min="0" max="100" step="1"></label>
           <label><span class="control-title">Peso: renta<output id="weight-income-value"></output></span><input id="weight-income" type="range" min="0" max="100" step="1"></label>
           <label><span class="control-title">Peso: crecimiento<output id="weight-growth-value"></output></span><input id="weight-growth" type="range" min="0" max="100" step="1"></label>
-          <label><span class="control-title">Peso: oportunidad<output id="weight-opportunity-value"></output></span><input id="weight-opportunity" type="range" min="0" max="100" step="1"></label>
         </div><p class="caption">Escenario independiente: score ponderado min-max entre municipios con datos; solo candidatas del estudio. No vuelve a entrenar k-means ni cambia la seleccion original. Facturacion de escenario = publico x penetracion x cuota / (competidores + 1).</p>
           <div class="scenario-summary"><div><strong id="scenario-total">n/d</strong><span>Escenario anual · cinco candidatas</span></div><div><strong id="scenario-baseline">n/d</strong><span>Escenario anual · cinco con mas publico</span></div></div>
           <p class="caption" id="scenario-message" role="status"></p><div class="table-wrap"><table><thead><tr><th>#</th><th class="name">Municipio</th><th>Score de escenario</th><th>Abonados / centro</th><th>Facturacion anual</th></tr></thead><tbody id="scenario-rows"></tbody></table></div><p class="caption" id="scenario-baseline-names"></p>
@@ -124,10 +121,64 @@
     const entrants=selected.filter(row=>!DATA.baseline.includes(row.id)),exits=baseline.filter(row=>!DATA.selection.includes(row.id));
     el('changes').textContent='Entran: '+(entrants.map(row=>row.name).join(', ')||'ninguno')+'. Salen: '+(exits.map(row=>row.name).join(', ')||'ninguno')+'.';
     el('selection-note').textContent='Estimaciones del estudio; no equivalen a ventas garantizadas ni a beneficio.';
-    el('municipal-rows').innerHTML=[...rows].sort((left,right)=>left.name.localeCompare(right.name,'es')).map(row=>`<tr><td>${escapeHtml(row.name)}<small>${escapeHtml(row.province)}</small></td><td>${fmt(row.target_population)}</td><td>${fmt(row.growth_pct,1)}</td><td>${money(row.income_eur)}</td><td>${fmt(row.tourism_beds)}</td><td>${fmt(row.competitor_count)}<small>${escapeHtml(row.coverage_note)}</small></td><td>${fmt(rate(row),2)}</td></tr>`).join('');
-    const grouped=new Map();for(const row of rows){if(!grouped.has(row.cluster))grouped.set(row.cluster,[]);grouped.get(row.cluster).push(row);}
-    const groups=[...grouped].map(([name,members])=>{const values=members.map(rate).filter(value=>value!=null);return {name,count:members.length,valid:values.length,mean:values.length?values.reduce((total,value)=>total+value,0)/values.length:null};});const maxRate=Math.max(...groups.map(group=>group.mean??0),1);
-    el('groups').innerHTML=groups.map(group=>`<div class="group"><span class="group-label">${escapeHtml(group.name)}</span><div class="track"><span style="width:${(group.mean??0)/maxRate*100}%"></span></div><strong>${fmt(group.mean,2)}</strong></div>`).join('');el('group-note').textContent=groups.map(group=>group.name+': '+group.valid+'/'+group.count+' calculables').join(' · ');
+    el('municipal-rows').innerHTML=[...rows].sort((left,right)=>left.name.localeCompare(right.name,'es')).map(row=>`<tr><td>${escapeHtml(row.name)}<small>${escapeHtml(row.province)}</small></td><td>${fmt(row.target_population)}</td><td>${fmt(row.growth_pct,1)}</td><td>${money(row.income_eur)}</td><td>${fmt(row.competitor_count)}<small>${escapeHtml(row.coverage_note)}</small></td><td>${fmt(rate(row),2)}</td></tr>`).join('');
+const assignedRows = rows.filter(
+    row =>
+        row.cluster !== 'Asignación no publicada' &&
+        row.cluster !== null &&
+        row.cluster !== undefined &&
+        row.cluster !== ''
+);
+
+const grouped = new Map();
+
+for (const row of assignedRows) {
+    if (!grouped.has(row.cluster)) {
+        grouped.set(row.cluster, []);
+    }
+
+    grouped.get(row.cluster).push(row);
+}
+
+const groups = [...grouped]
+    .map(([name, members]) => {
+        const values = members
+            .map(rate)
+            .filter(value => value != null);
+
+        return {
+            name,
+            count: members.length,
+            valid: values.length,
+            mean: values.length
+                ? values.reduce((total, value) => total + value, 0) / values.length
+                : null,
+        };
+    })
+    .sort((left, right) => Number(left.name) - Number(right.name));
+
+const maxRate = Math.max(
+    ...groups.map(group => group.mean ?? 0),
+    1
+);
+
+el('groups').innerHTML = groups
+    .map(group => `
+        <div class="group">
+            <span class="group-label">${escapeHtml(group.name)}</span>
+            <div class="track">
+                <span style="width:${(group.mean ?? 0) / maxRate * 100}%"></span>
+            </div>
+            <strong>${fmt(group.mean, 2)}</strong>
+        </div>
+    `)
+    .join('');
+
+el('group-note').textContent = groups
+    .map(group =>
+        `${group.name}: ${group.valid}/${group.count} calculables`
+    )
+    .join(' · ');
     const audit=DATA.audit||[];
     const references=audit.filter(row=>row.status==='reference_found').length;
     const specialized=audit.filter(row=>row.status==='specialized').length;

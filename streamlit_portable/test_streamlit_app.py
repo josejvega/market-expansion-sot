@@ -260,6 +260,10 @@ class Portable2DashboardTests(unittest.TestCase):
         self.assertIn("Simulador de escenarios", html)
         self.assertIn("Secciones censales y areas de influencia", html)
         self.assertIn("marketAnalysis.simulate", html)
+        self.assertIn('class="estimate-equation"', html)
+        self.assertIn("porcentaje de costes variables sobre ventas", html)
+        self.assertIn('id="breakeven-chart"', html)
+        self.assertIn("Punto de equilibrio", html)
         self.assertRegex(html, r"<style>\s*:root\{--ink:")
         self.assertIn("--accent:#a100ff", html)
         self.assertNotIn("\ufeff", html)
@@ -302,9 +306,9 @@ class Portable2DashboardTests(unittest.TestCase):
     def test_static_assets_match_integrated_portable2_files(self) -> None:
         web_dir = Path(__file__).resolve().parent / "web"
         expected_hashes = {
-            "streamlit.html": "72454e86fdc927450a45ba1ed64dafeb38ec7583a9e9a493792cae3c06e6fe2b",
-            "streamlit.css": "888cbb72656dda6aeda0bd3124646f80c2a0a522c4bbbf1f225b8d39eed35375",
-            "streamlit_analysis.js": "df7e560b61b16f0d4a40264162d941cfaf7111782d40efcdb3d80fdffb5fb13e",
+            "streamlit.html": "bd35d856a6b62aed9e4a4389607cb37b671812f5c22ea2639f19e3ede69afe94",
+            "streamlit.css": "252ed56dff2412e18de5b07916bc1bf944318035023324b0e040abad6a676c1a",
+            "streamlit_analysis.js": "2129c135c7c2def7c65aee3f0ed4814ba87bc6946357ed2a7e3b07afd575a7ec",
         }
 
         for filename, expected_hash in expected_hashes.items():

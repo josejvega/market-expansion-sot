@@ -3,7 +3,7 @@ const marketAnalysis = {
         if (![fixed, variableRatio].every(value => typeof value === 'number' && Number.isFinite(value)) || fixed < 0 || variableRatio < 0 || variableRatio >= 1) return null;
         const revenue = fixed / (1 - variableRatio);
         const members = typeof ticket === 'number' && ticket > 0 ? Math.ceil(revenue / ticket) : null;
-        return {revenue, members, capacityExceeded: members != null && capacity != null && members > capacity};
+        return {revenue, members, exactMembers: members == null ? null : revenue / ticket, capacityExceeded: members != null && capacity != null && members > capacity};
     },
     simulate(study, settings) {
         const weights = settings.weights;
@@ -63,11 +63,59 @@ if (typeof document !== 'undefined') {
     setValue('capacity', finance.capacity_members);
     function updateFinance() {
         const fixed = readNumber('fixed-cost'), variable = readNumber('variable-cost');
-        const result = marketAnalysis.breakEven(fixed, variable == null ? null : variable / 100, readNumber('finance-ticket'), readNumber('capacity'));
+        const ticket = readNumber('finance-ticket'), capacity = readNumber('capacity');
+        const result = marketAnalysis.breakEven(fixed, variable == null ? null : variable / 100, ticket, capacity);
         el('breakeven-revenue').textContent = result ? money(result.revenue) : 'n/d';
         el('breakeven-members').textContent = result ? fmt(result.members) : 'n/d';
         el('profitability-answer').textContent = result ? `El umbral operativo es ${money(result.revenue)} al ano, con ${money(fixed)} de costes fijos y ${fmt(variable, 1)} % de costes variables sobre ventas. ` + (result.members == null ? 'Sin cuota anual no se calcula el numero de abonados.' : `Equivale a ${fmt(result.members)} abonados a la cuota indicada.`) : 'No se puede determinar sin costes fijos anuales y porcentaje de costes variables. El margen de contribucion debe ser positivo.';
         el('capacity-note').textContent = result?.capacityExceeded ? 'El punto de equilibrio supera la capacidad indicada.' : 'Umbral operativo: no incluye inversion inicial, impuestos ni costes no incorporados a los parametros.';
+        const chart = el('breakeven-chart');
+        if (!result || result.exactMembers == null || !ticket || ticket <= 0) {
+            chart.setAttribute('viewBox', '0 0 820 260');
+            chart.innerHTML = '<text class="empty" x="410" y="130">Introduce costes, porcentaje variable y cuota anual para ver el punto de equilibrio.</text>';
+            return;
+        }
+        const width = 820, height = 260;
+        const left = 64, right = 790, top = 18, bottom = 205;
+        const maxMembers = Math.max(capacity || 0, result.exactMembers * 1.2, 1);
+        const maxValue = Math.max(
+            maxMembers * ticket,
+            fixed + maxMembers * ticket * (variable / 100),
+            fixed,
+        ) * 1.12;
+        const x = members => left + members / maxMembers * (right - left);
+        const y = value => bottom - value / maxValue * (bottom - top);
+        const breakX = x(result.exactMembers);
+        const breakY = y(result.revenue);
+        const capacityMarkup = capacity != null && capacity >= 0
+            ? `<line class="capacity-line" x1="${x(capacity)}" y1="${top}" x2="${x(capacity)}" y2="${bottom}"/><text x="${Math.min(x(capacity) + 5, right - 90)}" y="${top + 14}">Capacidad ${fmt(capacity)}</text>`
+            : '';
+        chart.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        chart.setAttribute(
+            'aria-label',
+            `Facturación y costes anuales por abonados. Punto de equilibrio: ${fmt(result.exactMembers)} abonados y ${money(result.revenue)}.`,
+        );
+        chart.innerHTML = `
+            <line class="axis" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}"/>
+            <line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${bottom}"/>
+            <text x="${left}" y="${top - 4}">${money(maxValue)}</text>
+            <text x="${left}" y="${bottom}">0</text>
+            <text x="${right}" y="${bottom + 18}" text-anchor="end">${fmt(maxMembers)} abonados</text>
+            <text x="${left}" y="${top + 14}">EUR/año</text>
+            <path class="revenue-line" d="M ${left} ${bottom} L ${right} ${y(maxMembers * ticket)}"/>
+            <path class="cost-line" d="M ${left} ${y(fixed)} L ${right} ${y(fixed + maxMembers * ticket * (variable / 100))}"/>
+            <line class="break-even-line" x1="${breakX}" y1="${top}" x2="${breakX}" y2="${bottom}"/>
+            ${capacityMarkup}
+            <circle cx="${breakX}" cy="${breakY}" r="5" fill="#a66a00"/>
+            <text x="${Math.min(breakX + 8, right - 145)}" y="${Math.max(breakY - 9, top + 12)}">Equilibrio: ${fmt(result.exactMembers)} · ${money(result.revenue)}</text>
+            <line class="revenue-line" x1="${left}" y1="238" x2="${left + 24}" y2="238"/>
+            <text class="legend" x="${left + 30}" y="242">Facturación</text>
+            <line class="cost-line" x1="${left + 150}" y1="238" x2="${left + 174}" y2="238"/>
+            <text class="legend" x="${left + 180}" y="242">Costes totales</text>
+            <line class="break-even-line" x1="${left + 310}" y1="238" x2="${left + 334}" y2="238"/>
+            <text class="legend" x="${left + 340}" y="242">Punto de equilibrio</text>
+            ${capacityMarkup ? '<line class="capacity-line" x1="600" y1="238" x2="624" y2="238"/><text class="legend" x="630" y="242">Capacidad</text>' : ''}
+        `;
     }
     for (const id of ['fixed-cost', 'variable-cost', 'finance-ticket', 'capacity']) el(id).addEventListener('input', updateFinance);
     updateFinance();
@@ -77,17 +125,16 @@ if (typeof document !== 'undefined') {
     el('simulation-empty').hidden = !!simulation;
     el('reset-scenario').disabled = !simulation;
     if (simulation) {
-        for (const profile of simulation.target_profiles || []) {const option = document.createElement('option');option.value = profile.id;option.textContent = profile.label;el('target-profile').append(option);}
         function resetSimulation() {
-            setValue('target-profile', 'current');setValue('target-scale', 100);setValue('penetration', simulation.penetration * 100);setValue('scenario-ticket', simulation.annual_ticket_eur);
-            for (const key of ['demand', 'income', 'growth', 'opportunity']) {el('weight-' + key).max = Math.max(100, simulation.weights[key]);el('weight-' + key).step = 'any';setValue('weight-' + key, simulation.weights[key]);}
+            setValue('target-scale', 100);setValue('penetration', simulation.penetration * 100);setValue('scenario-ticket', simulation.annual_ticket_eur);
+            for (const key of ['demand', 'income', 'growth']) {el('weight-' + key).max = Math.max(100, simulation.weights[key]);el('weight-' + key).step = 'any';setValue('weight-' + key, simulation.weights[key]);}
             updateSimulation();
         }
         function updateSimulation() {
-            const weights = Object.fromEntries(['demand', 'income', 'growth', 'opportunity'].map(key => [key, readNumber('weight-' + key)]));
+            const weights = Object.fromEntries(['demand', 'income', 'growth'].map(key => [key, readNumber('weight-' + key)]));
             el('target-scale-value').textContent = fmt(readNumber('target-scale')) + ' %';
             for (const [key, value] of Object.entries(weights)) el('weight-' + key + '-value').textContent = fmt(value, 2);
-            const result = marketAnalysis.simulate(DATA, {profile: el('target-profile').value, multiplier: readNumber('target-scale') / 100, penetration: readNumber('penetration') == null ? NaN : readNumber('penetration') / 100, ticket: readNumber('scenario-ticket') ?? NaN, weights});
+            const result = marketAnalysis.simulate(DATA, {profile: 'current', multiplier: readNumber('target-scale') / 100, penetration: readNumber('penetration') == null ? NaN : readNumber('penetration') / 100, ticket: readNumber('scenario-ticket') ?? NaN, weights});
             el('scenario-message').textContent = result.error || (result.selection.length < 5 ? 'No hay cinco candidatas con datos suficientes para estos pesos.' : `${result.excluded} municipios excluidos por datos insuficientes o publico objetivo nulo. Seleccion dentro de las candidatas entregadas.`);
             el('scenario-total').textContent = money(result.selectionTotal);
             el('scenario-baseline').textContent = money(result.baselineTotal);
