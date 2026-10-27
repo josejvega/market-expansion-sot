@@ -167,14 +167,14 @@ class GuardarSalidasNegocioTests(unittest.TestCase):
                 ["00001"],
             )
             self.assertEqual(
-                (output_directory / "resumen_negocio.md").read_text(
+                (output_directory / "tablas_definitivas_negocio.md").read_text(
                     encoding="utf-8"
                 ),
                 "# Informe de prueba\n",
             )
             self.assertEqual(
-                saved["resumen_negocio.md"],
-                output_directory / "resumen_negocio.md",
+                saved["tablas_definitivas_negocio.md"],
+                output_directory / "tablas_definitivas_negocio.md",
             )
             upload.assert_not_called()
 
@@ -217,11 +217,14 @@ class GuardarSalidasNegocioTests(unittest.TestCase):
             self.assertFalse(output_directory.exists())
             self.assertEqual(
                 uploaded_names,
-                ["municipios_evaluados_central.csv", "resumen_negocio.md"],
+                [
+                    "municipios_evaluados_central.csv",
+                    "tablas_definitivas_negocio.md",
+                ],
             )
             self.assertEqual(
-                saved["resumen_negocio.md"],
-                "s3://test-bucket/results/negocio/resumen_negocio.md",
+                saved["tablas_definitivas_negocio.md"],
+                "s3://test-bucket/results/negocio/tablas_definitivas_negocio.md",
             )
             upload.assert_called_once()
 
@@ -249,13 +252,48 @@ class GuardarSalidasNegocioTests(unittest.TestCase):
                 (output_directory / "municipios_evaluados_central.csv").is_file()
             )
             self.assertTrue(
-                (output_directory / "resumen_negocio.md").is_file()
+                (output_directory / "tablas_definitivas_negocio.md").is_file()
             )
             self.assertEqual(
-                saved["resumen_negocio.md"],
-                output_directory / "resumen_negocio.md",
+                saved["tablas_definitivas_negocio.md"],
+                output_directory / "tablas_definitivas_negocio.md",
             )
             upload.assert_called_once()
+
+    def test_cleans_only_obsolete_s3_business_outputs(self):
+        settings = SimpleNamespace(
+            save_s3=True,
+            bucket_name="test-bucket",
+            region_name="test-region",
+        )
+        with patch.object(
+            ejecutar,
+            "get_storage_settings",
+            return_value=settings,
+        ), patch.object(ejecutar.boto3, "client") as client:
+            deleted = ejecutar.limpiar_salidas_obsoletas_s3()
+
+        client.assert_called_once_with("s3", region_name="test-region")
+        self.assertEqual(
+            [call.kwargs for call in client.return_value.delete_object.call_args_list],
+            [
+                {
+                    "Bucket": "test-bucket",
+                    "Key": "results/negocio/resumen_negocio.md",
+                },
+                {
+                    "Bucket": "test-bucket",
+                    "Key": "results/negocio/top_facturacion_central.csv",
+                },
+            ],
+        )
+        self.assertEqual(
+            deleted,
+            [
+                "results/negocio/resumen_negocio.md",
+                "results/negocio/top_facturacion_central.csv",
+            ],
+        )
 
     def test_requires_at_least_one_storage_destination(self):
         settings = SimpleNamespace(

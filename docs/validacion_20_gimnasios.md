@@ -19,6 +19,10 @@ La muestra valida la existencia de referencias públicas, no una precisión de `
 
 Se comprobó el nombre y el municipio en Google Maps. Cuando la ficha no era clara, no coincidía exactamente o no era accesible, se utilizó la web oficial u otra fuente publicada.
 
+Se considera corroborada una referencia cuando una fuente pública permite identificar el establecimiento y el municipio. La correspondencia exacta con el registro OSM, la tipología de gimnasio y la actividad actual se valoran por separado; los casos ambiguos no se dan por confirmados. El porcentaje de referencias localizadas no mide la precisión como competidores activos ni la cobertura de establecimientos ausentes en OSM.
+
+**Fecha de revisión:** 26/10/2026, confirmada por el equipo.
+
 ## Interpretación para el modelo
 
 OSM se utiliza como fuente de localización de oferta deportiva, no como auditoría completa del mercado. El 100 % de cruce representa asignación espacial a municipios CNIG; no demuestra que todos los puntos sean gimnasios convencionales. La ausencia de un registro OSM tampoco demuestra ausencia de competencia.
