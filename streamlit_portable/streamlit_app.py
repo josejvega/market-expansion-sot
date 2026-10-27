@@ -27,8 +27,11 @@ from src.negocio.valor_negocio import (  # noqa: E402
 )
 from src.procesado.common.paths import GOLD_TABLE_PATH  # noqa: E402
 from streamlit_data import (  # noqa: E402
+    BUSINESS_OUTPUTS,
+    BUSINESS_RESULTS_PREFIX,
     MODEL_CANDIDATES_FILENAME,
     MODEL_CANDIDATES_S3_KEY,
+    load_business_outputs,
     load_municipality_data,
 )
 
@@ -47,6 +50,8 @@ def build_study(
     revenue_rule: str = "C",
     competitors: list[dict[str, object]] | None = None,
     candidates_artifact: str = MODEL_CANDIDATES_S3_KEY,
+    business_outputs: dict[str, pd.DataFrame] | None = None,
+    business_source: str | None = None,
 ) -> dict:
     """Adapt repository Gold, Silver, and model outputs to the dashboard."""
     analysis = evaluar(
@@ -57,12 +62,99 @@ def build_study(
         con_candidatos=False,
     )
     baseline = top5_baseline(analysis)
-    selection = (
-        top5_modelo(analysis)
-        if has_model_candidates
-        else analysis.iloc[0:0]
-    )
+    selection = top5_modelo(analysis) if has_model_candidates else analysis.iloc[0:0]
+    baseline_ids = baseline["municipality_code"].astype(str).tolist()
+    selection_ids = selection["municipality_code"].astype(str).tolist()
+    published_business_rows: dict[str, dict[str, object]] = {}
+    business_kpis: list[dict[str, object]] = []
+    business_robustness: list[dict[str, object]] = []
+    if business_outputs is not None:
+        business_selection = business_outputs["selection"]
+        business_baseline = business_outputs["baseline"]
+        business_comparison = business_outputs["comparison"].set_index("estrategia")
+        for strategy_key, label in (
+            ("Baseline", "Baseline"),
+            ("Modelo A oficial", "Modelo"),
+        ):
+            summary = business_comparison.loc[strategy_key]
+            business_kpis.append(
+                {
+                    "strategy": label,
+                    "selected": int(summary["centros_seleccionados"]),
+                    "viable": int(summary["centros_viables"]),
+                    "revenue_eur": float(
+                        summary["facturacion_anual_total_con_tope_eur"]
+                    ),
+                    "margin_eur": float(
+                        summary["margen_operativo_anual_total_eur"]
+                    ),
+                    "losses_eur": float(summary["perdidas_operativas_totales_eur"]),
+                    "demand_per_competitor": (
+                        None
+                        if pd.isna(summary["demanda_media_por_competidor"])
+                        else float(summary["demanda_media_por_competidor"])
+                    ),
+                }
+            )
+        available_ids = set(analysis["municipality_code"].astype(str))
+        selection_ids = business_selection["municipality_code"].astype(str).tolist()
+        baseline_ids = business_baseline["municipality_code"].astype(str).tolist()
+        unknown_ids = sorted(
+            (set(selection_ids) | set(baseline_ids)).difference(available_ids)
+        )
+        if unknown_ids:
+            raise ValueError(
+                "Las salidas de negocio incluyen municipios ausentes de Gold: "
+                f"{unknown_ids[:10]}."
+            )
+        gold_names = analysis.set_index("municipality_code")["municipality_name"]
+        for table in (business_selection, business_baseline):
+            for row in table.to_dict(orient="records"):
+                identity = str(row["municipality_code"])
+                if str(gold_names.loc[identity]) != str(row["municipality_name"]):
+                    raise ValueError(
+                        "El nombre municipal de las salidas de negocio no coincide "
+                        f"con Gold para el código {identity}."
+                    )
+                published_business_rows[identity] = row
+        robustness_by_code = business_outputs["robustness"].set_index(
+            "municipality_code"
+        )
+        robustness_table = business_outputs["robustness"]
+        total_scenarios = (
+            int(robustness_table["combinaciones_totales"].max())
+            if not robustness_table.empty
+            else None
+        )
+        for identity in selection_ids:
+            if identity not in robustness_by_code.index:
+                continue
+            row = robustness_by_code.loc[identity]
+            business_robustness.append(
+                {
+                    "id": identity,
+                    "name": str(row["municipality_name"]),
+                    "appearances": int(row["apariciones"]),
+                    "total_scenarios": total_scenarios,
+                    "average_position": float(row["posicion_media"]),
+                    "minimum_revenue_eur": (
+                        None
+                        if "fact_min" not in row.index or pd.isna(row["fact_min"])
+                        else float(row["fact_min"])
+                    ),
+                }
+            )
+
     params = parametros(scenario)
+    central_weights = ESCENARIOS_PESOS["central"]
+    def format_number_es(value: float, decimals: int = 0) -> str:
+        return (
+            f"{value:,.{decimals}f}"
+            .replace(",", "\0")
+            .replace(".", ",")
+            .replace("\0", ".")
+        )
+
     metadata = {
         "title": "Expansión de mercado · Andalucía",
         "region": "Andalucía",
@@ -72,23 +164,135 @@ def build_study(
             "repositorio. Las cifras económicas son escenarios, no previsiones."
         ),
         "methodology": (
-            "La población objetivo corresponde a residentes de 18–50 años. "
-            "El crecimiento es el cambio porcentual de población total entre "
-            "el primer y el último año disponible. La competencia ponderada "
-            "aplica los pesos configurados en el análisis de negocio."
+            "K-means agrupa municipios comparables usando log(1 + población de "
+            "18–50 años), renta neta media por persona y crecimiento de la "
+            "población total; las variables se estandarizan antes de calcular "
+            "distancias. Se probaron inercia y silhouette y se fijó k = 4 en "
+            "el notebook. Después, el modelo de negocio pondera la oferta "
+            "observada y compara la competencia por cada 10.000 personas de "
+            "18–50 años con la media del cluster. La selección final filtra "
+            "candidatos por viabilidad y calidad del dato, y ordena por "
+            "facturación estimada con capacidad."
         ),
+        "business_formulas": [
+            {
+                "label": "Competencia ponderada",
+                "expression": (
+                    "gimnasios × 1 + otras instalaciones × 0,1"
+                ),
+                "detail": (
+                    "Pesos del escenario central; Gold agrupa las otras "
+                    "instalaciones deportivas."
+                ),
+            },
+            {
+                "label": "Tasa para comparar dentro del cluster",
+                "expression": (
+                    "competencia ponderada ÷ población de 18–50 × 10.000"
+                ),
+                "detail": (
+                    "Candidato si su tasa es inferior a la media de su cluster."
+                ),
+            },
+            {
+                "label": "Control mínimo de calidad OSM",
+                "expression": (
+                    "competencia ponderada ÷ "
+                    "(población de 18–50 ÷ 10.000) ≥ 50 %"
+                ),
+                "detail": (
+                    "Si no supera el umbral, el municipio se deja pendiente "
+                    "de validar con una segunda fuente."
+                ),
+            },
+            {
+                "label": "Demanda potencial",
+                "expression": (
+                    "población de 18–50 × penetración "
+                    f"({format_number_es(params['penetracion'] * 100, 1)} %)"
+                ),
+                "detail": "Estimación de socios potenciales del mercado.",
+            },
+            {
+                "label": "Valor teórico del mercado anual",
+                "expression": (
+                    "demanda potencial × "
+                    f"{format_number_es(params['ticket_mensual'], 2)} € "
+                    "al mes sin IVA × 12"
+                ),
+                "detail": (
+                    "Potencial del mercado antes de repartir captación y "
+                    "aplicar la capacidad; no equivale a facturación del centro."
+                ),
+            },
+            {
+                "label": "Cuota captada",
+                "expression": (
+                    "mínimo("
+                    f"{format_number_es(params['atractivo_nuevo'], 2)} ÷ "
+                    "(competencia ponderada + "
+                    f"{format_number_es(params['atractivo_nuevo'], 2)}), "
+                    f"{format_number_es(params['cuota_max'] * 100, 0)} %)"
+                ),
+                "detail": (
+                    "2,18 representa el atractivo relativo supuesto para un "
+                    "nuevo centro low-cost."
+                ),
+            },
+            {
+                "label": "Socios captables / centro",
+                "expression": "demanda potencial × cuota captada",
+                "detail": "Captación estimada antes de aplicar el límite físico.",
+            },
+            {
+                "label": "Socios efectivos del centro",
+                "expression": (
+                    "mínimo(socios captables, capacidad de "
+                    f"{format_number_es(params['capacidad'])})"
+                ),
+                "detail": "La capacidad limita las ventas atribuibles a un centro.",
+            },
+            {
+                "label": "Facturación anual estimada",
+                "expression": (
+                    "socios efectivos × "
+                    f"{format_number_es(params['ticket_mensual'], 2)} € "
+                    "al mes sin IVA × 12"
+                ),
+                "detail": "Escenario económico; no son ventas observadas.",
+            },
+            {
+                "label": "Margen operativo estimado",
+                "expression": (
+                    "facturación anual − "
+                    f"{format_number_es(params['coste_anual_club'])} € "
+                    "de coste anual"
+                ),
+                "detail": "Viable en el escenario central si el margen es ≥ 0.",
+            },
+        ],
         "baseline_description": (
-            "Cinco municipios con mayor población de 18–50 años, ordenados "
+            "Baseline de negocio publicado: cinco municipios con mayor población "
+            "de 18–50 años dentro de los municipios asignados por el modelo."
+            if business_outputs is not None
+            else "Cinco municipios con mayor población de 18–50 años, ordenados "
             "por código municipal para desempatar."
         ),
         "selection_description": (
-            "La selección se limita a los candidatos publicados por el modelo."
-            if has_model_candidates
-            else "No se publica una selección de candidatos porque falta el "
-            "artefacto del modelo."
+            "Selección central de negocio publicada por el proceso de evaluación "
+            "y leída desde sus salidas CSV."
+            if business_outputs is not None
+            else (
+                "La selección se limita a los candidatos publicados por el modelo."
+                if has_model_candidates
+                else "No se publica una selección de candidatos porque falta el "
+                "artefacto del modelo."
+            )
         ),
         "missing_artifacts": (
-            [] if has_model_candidates else [candidates_artifact]
+            []
+            if has_model_candidates or business_outputs is not None
+            else [candidates_artifact]
         ),
         "revenue_method": (
             f"Escenario {scenario} con la regla de facturación "
@@ -103,6 +307,14 @@ def build_study(
             f"Penetración central del escenario: {params['penetracion']:.1%}.",
             f"Cuota mensual sin IVA: {params['ticket_mensual']:.2f} €.",
             f"Coste anual de referencia: {params['coste_anual_club']:,.0f} €.",
+            f"Capacidad de referencia por centro: {params['capacidad']:,} socios.",
+            f"Cuota máxima de captación: {params['cuota_max']:.0%}.",
+            f"Atractivo relativo del nuevo centro: {params['atractivo_nuevo']:.2f}.",
+            (
+                "Pesos de competencia central: gimnasio "
+                f"{central_weights['fitness_centre']:.1f}; otras instalaciones "
+                f"{central_weights['sports_centre']:.1f}."
+            ),
             "El recuento OSM de instalaciones no es una auditoría de competidores.",
         ],
         "limitations": [
@@ -138,18 +350,48 @@ def build_study(
             },
         ],
     }
+    if business_outputs is not None:
+        metadata["business_kpis"] = business_kpis
+        metadata["business_robustness"] = business_robustness
+        metadata["sources"].append(
+            {
+                "label": (
+                    f"Selección y baseline de negocio · {business_source or BUSINESS_RESULTS_PREFIX}"
+                ),
+                "url": None,
+            }
+        )
+        metadata["sources"].append(
+            {
+                "label": (
+                    f"Comparación económica y sensibilidad · "
+                    f"{BUSINESS_RESULTS_PREFIX}/"
+                    f"{BUSINESS_OUTPUTS['comparison']} y "
+                    f"{BUSINESS_OUTPUTS['robustness']}"
+                ),
+                "url": None,
+            }
+        )
 
     records = []
     for row in analysis.to_dict(orient="records"):
         identity = str(row["municipality_code"])
+        business_row = published_business_rows.get(identity)
         cluster_value = row.get("cluster")
         cluster = (
             str(int(cluster_value))
             if pd.notna(cluster_value)
             else "Asignación no publicada"
         )
-        is_candidate = bool(row.get("candidate_flag", False))
-        if has_model_candidates and is_candidate and row.get("viable", False):
+        is_candidate = bool(row.get("candidate_flag", False)) or identity in selection_ids
+        if identity in selection_ids and business_outputs is not None:
+            reason = str(
+                business_row.get(
+                    "motivo_calidad",
+                    "Selección central de negocio publicada en S3.",
+                )
+            )
+        elif has_model_candidates and is_candidate and row.get("viable", False):
             reason = (
                 "Menos competencia ponderada por población que la media de su "
                 "grupo; supera el umbral de viabilidad."
@@ -189,11 +431,19 @@ def build_study(
                 ),
                 "competitors_weighted": float(row["competidores_pond"]),
                 "demand_per_competitor": (
+                    float(business_row["demanda_por_comp"])
+                    if business_row is not None
+                    else (
                     None
                     if pd.isna(row["demanda_por_comp"])
                     else float(row["demanda_por_comp"])
+                    )
                 ),
-                "annual_revenue_eur": float(row["facturacion_anual"]),
+                "annual_revenue_eur": (
+                    float(business_row["facturacion_anual"])
+                    if business_row is not None
+                    else float(row["facturacion_anual"])
+                ),
                 "revenue_low_eur": None,
                 "revenue_high_eur": None,
                 "score": None,
@@ -208,8 +458,8 @@ def build_study(
         "schema_version": 1,
         "metadata": metadata,
         "municipalities": records,
-        "selection": selection["municipality_code"].astype(str).tolist(),
-        "baseline": baseline["municipality_code"].astype(str).tolist(),
+        "selection": selection_ids,
+        "baseline": baseline_ids,
         "competitors": competitors or [],
         "audit": [],
         "market_checks": [],
@@ -363,12 +613,17 @@ def main() -> None:
             candidates_mtime_ns,
             candidates_s3_key,
         )
+        business_outputs, business_source = load_business_outputs(
+            PROJECT_ROOT / "data" / "outputs"
+        )
         study = build_study(
             municipalities,
             has_model_candidates,
             gold_source,
             competitors=competitors,
             candidates_artifact=candidates_s3_key or str(candidates_path),
+            business_outputs=business_outputs,
+            business_source=business_source,
         )
         html = render_study(study)
     except (OSError, ImportError, RuntimeError, ValueError) as error:

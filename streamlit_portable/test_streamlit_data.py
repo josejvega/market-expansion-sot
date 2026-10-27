@@ -13,7 +13,9 @@ from shapely.geometry import Point, Polygon
 
 from botocore.exceptions import ClientError, NoCredentialsError
 from streamlit_data import (
+    BUSINESS_OUTPUTS,
     add_municipality_coordinates,
+    load_business_outputs,
     load_municipality_data,
     prepare_competitor_records,
     prepare_model_candidates,
@@ -247,6 +249,147 @@ class MunicipalityDataTests(unittest.TestCase):
         self.assertEqual(source, "Local · gold.parquet")
         self.assertIn("lat", result.columns)
         self.assertEqual(len(competitors), 1)
+
+
+class BusinessOutputsTests(unittest.TestCase):
+    def _table(self, code: str, name: str) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "municipality_code": [code],
+                "municipality_name": [name],
+                "facturacion_anual": [1234.5],
+                "demanda_por_comp": [98.2],
+            }
+        )
+
+    def _comparison(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "estrategia": ["Baseline", "Modelo A oficial"],
+                "centros_seleccionados": [5, 5],
+                "centros_viables": [3, 5],
+                "facturacion_anual_total_con_tope_eur": [2500000.0, 3400000.0],
+                "margen_operativo_anual_total_eur": [-100000.0, 600000.0],
+                "perdidas_operativas_totales_eur": [300000.0, 0.0],
+                "demanda_media_por_competidor": [900.0, 2100.0],
+            }
+        )
+
+    def _robustness(self) -> pd.DataFrame:
+        return pd.DataFrame(
+            {
+                "municipality_code": ["04001"],
+                "municipality_name": ["Abla"],
+                "apariciones": [67],
+                "posicion_media": [2.1],
+                "robustez": ["67 de 108"],
+                "combinaciones_totales": [108],
+                "fact_min": [581908.0],
+            }
+        )
+
+    def test_loads_business_selection_and_baseline_from_local_exports(self) -> None:
+        with TemporaryDirectory() as directory:
+            output_dir = Path(directory)
+            self._table("04001", "Abla").to_csv(
+                output_dir / BUSINESS_OUTPUTS["selection"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+            baseline = pd.concat(
+                [
+                    self._table(f"0400{index}", f"Municipio {index}")
+                    for index in range(1, 6)
+                ],
+                ignore_index=True,
+            )
+            baseline.to_csv(
+                output_dir / BUSINESS_OUTPUTS["baseline"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+            self._comparison().to_csv(
+                output_dir / BUSINESS_OUTPUTS["comparison"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+            self._robustness().to_csv(
+                output_dir / BUSINESS_OUTPUTS["robustness"],
+                index=False,
+                encoding="utf-8-sig",
+            )
+
+            with patch(
+                "streamlit_data.get_storage_settings",
+                return_value=SimpleNamespace(bucket_name=None, region_name=None),
+            ):
+                tables, source = load_business_outputs(output_dir)
+
+        self.assertEqual(source, f"Local · {output_dir}")
+        self.assertEqual(tables["selection"]["municipality_code"].tolist(), ["04001"])
+        self.assertEqual(
+            tables["baseline"]["municipality_code"].tolist(),
+            [f"0400{index}" for index in range(1, 6)],
+        )
+        self.assertEqual(
+            tables["selection"].loc[0, "facturacion_anual"],
+            1234.5,
+        )
+        self.assertEqual(
+            tables["comparison"]["estrategia"].tolist(),
+            ["Baseline", "Modelo A oficial"],
+        )
+        self.assertEqual(tables["robustness"].loc[0, "apariciones"], 67)
+
+    def test_loads_business_selection_and_baseline_from_s3(self) -> None:
+        selection = io.BytesIO(
+            self._table("04001", "Abla").to_csv(index=False).encode("utf-8")
+        )
+        baseline = pd.concat(
+            [
+                self._table(f"0400{index}", f"Municipio {index}")
+                for index in range(1, 6)
+            ],
+            ignore_index=True,
+        )
+        baseline_buffer = io.BytesIO(baseline.to_csv(index=False).encode("utf-8"))
+        comparison_buffer = io.BytesIO(
+            self._comparison().to_csv(index=False).encode("utf-8")
+        )
+        robustness_buffer = io.BytesIO(
+            self._robustness().to_csv(index=False).encode("utf-8")
+        )
+        s3_client = unittest.mock.MagicMock()
+        s3_client.get_object.side_effect = [
+            {"Body": selection},
+            {"Body": baseline_buffer},
+            {"Body": comparison_buffer},
+            {"Body": robustness_buffer},
+        ]
+
+        with (
+            patch(
+                "streamlit_data.get_storage_settings",
+                return_value=SimpleNamespace(
+                    bucket_name="test-bucket",
+                    region_name="eu-west-1",
+                ),
+            ),
+            patch("streamlit_data.boto3.client", return_value=s3_client),
+        ):
+            tables, source = load_business_outputs()
+
+        self.assertEqual(source, "S3 · results/negocio/")
+        self.assertEqual(tables["selection"]["municipality_code"].tolist(), ["04001"])
+        self.assertEqual(
+            [call.kwargs["Key"] for call in s3_client.get_object.call_args_list],
+            [
+                "results/negocio/seleccion_modelo_central.csv",
+                "results/negocio/baseline_central.csv",
+                "results/negocio/comparacion_estrategias_central.csv",
+                "results/negocio/sensibilidad_frecuencias.csv",
+            ],
+        )
 
     def test_loads_without_optional_local_model_artifacts(self) -> None:
         with TemporaryDirectory() as directory:

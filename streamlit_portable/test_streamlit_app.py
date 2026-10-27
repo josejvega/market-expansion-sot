@@ -157,6 +157,92 @@ class Portable2DashboardTests(unittest.TestCase):
             all(row["score"] is None for row in study["municipalities"])
         )
 
+    def test_uses_published_business_selection_and_financials(self) -> None:
+        municipalities = self.municipalities.assign(
+            cluster=pd.Series([0, 0, pd.NA, 1, pd.NA, pd.NA], dtype="Int64"),
+            candidate_flag=[True, True, False, True, False, False],
+        )
+        selection = pd.DataFrame(
+            {
+                "municipality_code": ["04001"],
+                "municipality_name": ["Municipio 1"],
+                "facturacion_anual": [123456.0],
+                "demanda_por_comp": [456.0],
+                "motivo_calidad": ["Publicada por el análisis de negocio"],
+            }
+        )
+        baseline_ids = municipalities.sort_values(
+            ["population_18_50", "municipality_code"],
+            ascending=[False, True],
+        ).head(5)
+        baseline = baseline_ids.assign(
+            facturacion_anual=100000.0,
+            demanda_por_comp=200.0,
+        )
+        comparison = pd.DataFrame(
+            {
+                "estrategia": ["Baseline", "Modelo A oficial"],
+                "centros_seleccionados": [5, 5],
+                "centros_viables": [3, 5],
+                "facturacion_anual_total_con_tope_eur": [2500000.0, 3400000.0],
+                "margen_operativo_anual_total_eur": [-100000.0, 600000.0],
+                "perdidas_operativas_totales_eur": [300000.0, 0.0],
+                "demanda_media_por_competidor": [900.0, 2100.0],
+            }
+        )
+        robustness = pd.DataFrame(
+            {
+                "municipality_code": ["04001"],
+                "municipality_name": ["Municipio 1"],
+                "apariciones": [67],
+                "posicion_media": [2.1],
+                "robustez": ["67 de 108"],
+                "combinaciones_totales": [108],
+                "fact_min": [581908.0],
+            }
+        )
+
+        study = build_study(
+            municipalities,
+            has_model_candidates=True,
+            gold_source="S3 · gold/tabla_oro_municipios_andalucia.parquet",
+            business_outputs={
+                "selection": selection,
+                "baseline": baseline,
+                "comparison": comparison,
+                "robustness": robustness,
+            },
+            business_source="S3 · results/negocio/",
+        )
+
+        self.assertEqual(study["selection"], ["04001"])
+        self.assertEqual(study["baseline"], baseline_ids["municipality_code"].tolist())
+        selected = next(
+            row for row in study["municipalities"] if row["id"] == "04001"
+        )
+        self.assertEqual(selected["annual_revenue_eur"], 123456.0)
+        self.assertEqual(selected["demand_per_competitor"], 456.0)
+        self.assertEqual(selected["reason"], "Publicada por el análisis de negocio")
+        self.assertEqual(study["metadata"]["business_kpis"][1]["viable"], 5)
+        self.assertEqual(
+            study["metadata"]["business_robustness"][0]["appearances"],
+            67,
+        )
+        formulas = study["metadata"]["business_formulas"]
+        self.assertTrue(
+            any(
+                item["label"] == "Facturación anual estimada"
+                for item in formulas
+            )
+        )
+        self.assertEqual(validate_study(study), study)
+        html = render_study(study)
+        self.assertIn('id="business-formulas"', html)
+        self.assertIn("KPI y estabilidad de la recomendacion", html)
+        self.assertIn('"business_kpis"', html)
+        self.assertIn('"business_robustness"', html)
+        self.assertNotIn("<th>Score</th>", html)
+
     def test_renders_portable2_layout_with_live_repository_data(self) -> None:
         study = build_study(
             self.municipalities,
@@ -188,8 +274,8 @@ class Portable2DashboardTests(unittest.TestCase):
     def test_static_assets_match_integrated_portable2_files(self) -> None:
         web_dir = Path(__file__).resolve().parent / "web"
         expected_hashes = {
-            "streamlit.html": "4292548b23273e53ab68038e81856b81140b112ce1f29d02edec089082dd9865",
-            "streamlit.css": "7cac206662c387b06a3134db7de68f98ffef33e9adb43d7ecec24e2e2328b638",
+            "streamlit.html": "e257ddaa812aa04ca85f346f25460bad875f817a6d2ac060f7532837d6eb03f5",
+            "streamlit.css": "888cbb72656dda6aeda0bd3124646f80c2a0a522c4bbbf1f225b8d39eed35375",
             "streamlit_analysis.js": "df7e560b61b16f0d4a40264162d941cfaf7111782d40efcdb3d80fdffb5fb13e",
         }
 

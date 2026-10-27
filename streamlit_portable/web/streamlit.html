@@ -21,7 +21,7 @@
   <main id="app">
     <section id="decision" role="tabpanel" aria-labelledby="tab-decision">
       <div class="stats"><div><strong id="selection-count"></strong><span>Un centro por municipio</span></div><div><strong id="total-revenue"></strong><span id="selection-revenue-label">Facturacion anual estimada · cinco centros</span></div><div><strong id="candidate-count"></strong><span>Municipios candidatos</span></div></div>
-      <div class="decision"><div class="map-shell"><h2>Seleccion frente a baseline</h2><div id="map" aria-label="Seleccion, baseline, candidatas y competencia"></div><div class="map-key"><span><i class="dot"></i>Seleccion 1-5</span><span><i class="dot baseline"></i>Baseline B1-B5</span></div></div><section><h2>Cinco ubicaciones propuestas</h2><div class="table-wrap"><table><thead><tr><th>#</th><th class="name">Municipio</th><th>Score</th><th>Demanda /<br>competidor</th><th>Facturacion<br>anual por centro</th><th class="name">Motivo</th></tr></thead><tbody id="selected-rows"></tbody></table></div><p class="caption">Demanda por competidor: abonados potenciales. Los rangos son los entregados por el modelo; no implican intervalos de confianza.</p></section></div>
+      <div class="decision"><div class="map-shell"><h2>Seleccion frente a baseline</h2><div id="map" aria-label="Seleccion, baseline, candidatas y competencia"></div><div class="map-key"><span><i class="dot"></i>Seleccion 1-5</span><span><i class="dot baseline"></i>Baseline B1-B5</span></div></div><section><h2>Cinco ubicaciones propuestas</h2><div class="table-wrap"><table><thead><tr><th>#</th><th class="name">Municipio</th><th>Demanda /<br>competidor</th><th>Facturacion<br>anual por centro</th><th class="name">Motivo</th></tr></thead><tbody id="selected-rows"></tbody></table></div><p class="caption">Demanda por competidor: abonados potenciales. Las cifras son estimaciones, no intervalos de confianza.</p></section></div>
       <p class="notice" id="selection-note"></p>
       <section class="comparison"><h2>Comparacion con baseline</h2><p id="baseline-description" class="caption"></p><div class="comparison-grid"><div><div class="table-wrap"><table><thead><tr><th>Lista</th><th>Demanda /<br>competidor media</th><th>Facturacion anual<br>de cinco centros</th></tr></thead><tbody id="comparison-rows"></tbody></table></div><p class="caption" id="changes"></p></div><div><h3>Baseline</h3><div class="table-wrap"><table><thead><tr><th>Municipio</th><th>Demanda /<br>competidor</th><th>Facturacion anual<br>por centro</th></tr></thead><tbody id="baseline-rows"></tbody></table></div></div></div><p class="caption">Totales: suma de las cifras entregadas por centro. Si falta una estimacion, no se presenta un total parcial. La suma de limites no es un intervalo de confianza conjunto.</p></section>
       <section class="analysis-band"><h2>Punto de equilibrio operativo</h2><p class="formula-note">Facturacion minima = Costes fijos anuales / (1 - Proporcion de costes variables)</p>
@@ -52,11 +52,17 @@
       <div class="intelligence"><section><h2>Metodo del estudio</h2><p class="method-copy" id="methodology"></p></section><section><h2>Oferta por grupo</h2><p class="caption">Competidores por 10.000 personas objetivo · media de los municipios con datos</p><div id="groups"></div><p class="caption" id="group-note"></p></section></div>
       <section class="estimate" aria-labelledby="estimate-heading">
         <h2 id="estimate-heading">Como se estima la facturacion</h2>
-        <div class="estimate-equation" id="revenue-formula" role="math" hidden>
-          <span class="equation-label" id="formula-label"></span>
-          <span class="fraction"><span class="numerator" id="formula-numerator"></span><span class="denominator" id="formula-denominator"></span></span>
-        </div>
-        <p id="revenue-method" class="method-copy"></p><h3>Supuestos del estudio</h3><ul id="assumptions"></ul>
+        <p id="revenue-method" class="method-copy"></p>
+        <ol id="business-formulas" class="business-formulas"></ol>
+        <h3>Supuestos del escenario central</h3><ul id="assumptions"></ul>
+      </section>
+      <section id="business-summary" class="analysis-band" hidden>
+        <h2>KPI y estabilidad de la recomendacion</h2>
+        <p class="caption">Comparacion publicada por el analisis de negocio. Cifras estimadas; no son resultados observados.</p>
+        <div class="table-wrap"><table><thead><tr><th>Estrategia</th><th>Centros viables</th><th>Facturacion operativa anual total</th><th>Margen operativo anual total</th><th>Perdidas operativas</th><th>Demanda media / competidor</th></tr></thead><tbody id="business-kpi-rows"></tbody></table></div>
+        <h3>Robustez de los municipios seleccionados</h3>
+        <p class="caption">Apariciones en combinaciones de sensibilidad. Son escenarios, no una probabilidad de exito.</p>
+        <div class="table-wrap"><table><thead><tr><th>Municipio</th><th>Apariciones</th><th>Posicion media</th><th>Facturacion minima al aparecer</th></tr></thead><tbody id="business-robustness-rows"></tbody></table></div>
       </section>
       <section class="analysis-band"><div class="section-heading"><h2>Simulador de escenarios</h2><button class="icon" id="reset-scenario" title="Restaurar parametros" aria-label="Restaurar parametros"><i data-lucide="rotate-ccw"></i></button></div>
         <p id="simulation-empty" class="caption">Configuracion de simulacion no aportada en esta entrega.</p>
@@ -102,19 +108,17 @@
     window.addEventListener('resize',resizeViews);
     document.title=meta.title;el('title').textContent=meta.title;el('region').textContent=meta.region+' / Gimnasios low-cost';el('period').textContent=meta.period;el('target-description').textContent=meta.target_description;
     el('baseline-description').textContent=meta.baseline_description;el('methodology').textContent=meta.methodology;el('revenue-method').textContent=meta.revenue_method;
-    if(meta.revenue_formula){
-      const formula=meta.revenue_formula;
-      el('formula-label').textContent=formula.label+' =';
-      formula.numerator.forEach((factor,index)=>{if(index)el('formula-numerator').append(document.createTextNode(' \u00d7 '));const term=document.createElement('span');term.textContent=factor;el('formula-numerator').append(term);});
-      el('formula-denominator').textContent=formula.denominator;
-      el('revenue-formula').setAttribute('aria-label',formula.label+' = ('+formula.numerator.join(' por ')+') dividido entre ('+formula.denominator+')');
-      el('revenue-formula').hidden=false;
+    el('business-formulas').replaceChildren(...(meta.business_formulas||[]).map(item=>{const row=document.createElement('li'),heading=document.createElement('strong'),equation=document.createElement('code'),detail=document.createElement('span');heading.textContent=item.label;equation.textContent=item.expression;detail.textContent=item.detail;row.append(heading,equation,detail);return row;}));
+    if(meta.business_kpis?.length){
+      el('business-summary').hidden=false;
+      el('business-kpi-rows').innerHTML=meta.business_kpis.map(row=>`<tr><td>${escapeHtml(row.strategy)}</td><td>${fmt(row.viable)} / ${fmt(row.selected)}</td><td>${money(row.revenue_eur)}</td><td>${money(row.margin_eur)}</td><td>${money(row.losses_eur)}</td><td>${fmt(row.demand_per_competitor,1)}</td></tr>`).join('');
+      el('business-robustness-rows').innerHTML=meta.business_robustness?.length?meta.business_robustness.map(row=>`<tr><td>${escapeHtml(row.name)}</td><td>${fmt(row.appearances)} / ${fmt(row.total_scenarios)}</td><td>${fmt(row.average_position,1)}</td><td>${money(row.minimum_revenue_eur)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">No hay resultados de sensibilidad para estos municipios.</td></tr>';
     }
     listItems('assumptions',meta.assumptions,'Sin supuestos documentados.');listItems('limitations',meta.limitations,'Sin limitaciones documentadas.');
     el('sources').innerHTML=meta.sources.length?meta.sources.map(source=>safeLink(source.label,source.url)).join(''):'Sin fuentes documentadas.';
     el('selection-count').textContent=`${selected.length} municipios`;el('selection-revenue-label').textContent=`Facturacion anual estimada · ${selected.length} centros`;el('total-revenue').textContent=money(sumField(selected,'annual_revenue_eur'));el('candidate-count').textContent=fmt(rows.filter(row=>row.candidate).length);
     el('municipal-count').textContent=fmt(rows.length);el('target-count').textContent=fmt(sumField(rows,'target_population'));el('competition-count').textContent=fmt(DATA.competitors.length);
-    el('selected-rows').innerHTML=selected.map((row,index)=>`<tr><td>${index+1}</td><td class="name"><button class="place" data-id="${escapeHtml(row.id)}">${escapeHtml(row.name)}</button><small>${escapeHtml(row.province)}</small></td><td class="score">${fmt(row.score,1)}</td><td>${fmt(row.demand_per_competitor)}</td><td class="money">${revenue(row)}</td><td class="reason">${escapeHtml(row.reason)}</td></tr>`).join('');
+    el('selected-rows').innerHTML=selected.map((row,index)=>`<tr><td>${index+1}</td><td class="name"><button class="place" data-id="${escapeHtml(row.id)}">${escapeHtml(row.name)}</button><small>${escapeHtml(row.province)}</small></td><td>${fmt(row.demand_per_competitor)}</td><td class="money">${revenue(row)}</td><td class="reason">${escapeHtml(row.reason)}</td></tr>`).join('');
     el('baseline-rows').innerHTML=baseline.map((row,index)=>`<tr><td><button class="place" data-id="${escapeHtml(row.id)}">B${index+1} · ${escapeHtml(row.name)}</button></td><td>${fmt(row.demand_per_competitor)}</td><td class="money">${revenue(row)}</td></tr>`).join('');
     el('comparison-rows').innerHTML=[['Seleccion',selected],['Baseline',baseline]].map(([label,listing])=>{const valid=listing.filter(row=>row.demand_per_competitor!=null);const mean=valid.length?valid.reduce((total,row)=>total+row.demand_per_competitor,0)/valid.length:null;const total={annual_revenue_eur:sumField(listing,'annual_revenue_eur'),revenue_low_eur:sumField(listing,'revenue_low_eur'),revenue_high_eur:sumField(listing,'revenue_high_eur')};return `<tr><td>${label}</td><td>${fmt(mean)}<small>${valid.length}/${listing.length} calculables</small></td><td class="money">${revenue(total)}</td></tr>`;}).join('');
     const entrants=selected.filter(row=>!DATA.baseline.includes(row.id)),exits=baseline.filter(row=>!DATA.selection.includes(row.id));

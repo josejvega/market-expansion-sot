@@ -20,6 +20,13 @@ from src.procesado.common.paths import (
 
 MODEL_CANDIDATES_FILENAME = "municipios_candidatos.parquet"
 MODEL_CANDIDATES_S3_KEY = f"results/{MODEL_CANDIDATES_FILENAME}"
+BUSINESS_RESULTS_PREFIX = "results/negocio"
+BUSINESS_OUTPUTS = {
+    "selection": "seleccion_modelo_central.csv",
+    "baseline": "baseline_central.csv",
+    "comparison": "comparacion_estrategias_central.csv",
+    "robustness": "sensibilidad_frecuencias.csv",
+}
 COMPETITOR_COLUMNS = {
     "osm_type",
     "osm_id",
@@ -447,6 +454,242 @@ def load_municipality_data(
         else []
     )
     return municipalities, has_candidates, source, competitors
+
+
+def load_business_outputs(
+    local_output_dir: Path | None = None,
+) -> tuple[dict[str, pd.DataFrame], str]:
+    """Load the published business decision, KPI comparison, and sensitivity."""
+    local_output_dir = Path(
+        local_output_dir
+        or Path(__file__).resolve().parents[1] / "data" / "outputs"
+    )
+    settings = get_storage_settings()
+    tables: dict[str, pd.DataFrame] = {}
+
+    if settings.bucket_name:
+        client_options: dict[str, object] = {
+            "config": Config(
+                connect_timeout=10,
+                read_timeout=120,
+                retries={"max_attempts": 3, "mode": "standard"},
+            )
+        }
+        if settings.region_name:
+            client_options["region_name"] = settings.region_name
+        try:
+            client = boto3.client("s3", **client_options)
+        except BotoCoreError as error:
+            raise RuntimeError(
+                "No se pudo crear el cliente S3 para cargar los resultados "
+                "de negocio. Comprueba la región y las credenciales AWS."
+            ) from error
+
+        for name, filename in BUSINESS_OUTPUTS.items():
+            key = f"{BUSINESS_RESULTS_PREFIX}/{filename}"
+            try:
+                response = client.get_object(
+                    Bucket=settings.bucket_name,
+                    Key=key,
+                )
+                with response["Body"] as body:
+                    tables[name] = pd.read_csv(
+                        BytesIO(body.read()),
+                        encoding="utf-8-sig",
+                        dtype={"municipality_code": "string"},
+                    )
+            except (BotoCoreError, ClientError) as error:
+                error_code = getattr(error, "response", {}).get(
+                    "Error", {}
+                ).get("Code")
+                if error_code in {"NoSuchKey", "404"}:
+                    raise RuntimeError(
+                        f"Falta s3://{settings.bucket_name}/{key}. "
+                        "Ejecuta `python -m src.negocio.ejecutar` para publicar "
+                        "la selección y el baseline de negocio."
+                    ) from error
+                raise RuntimeError(
+                    _s3_read_error_message(settings.bucket_name, key, error)
+                ) from error
+        source = f"S3 · {BUSINESS_RESULTS_PREFIX}/"
+    else:
+        for name, filename in BUSINESS_OUTPUTS.items():
+            path = local_output_dir / filename
+            if not path.is_file():
+                raise FileNotFoundError(
+                    f"Falta la salida de negocio local {path}. Ejecuta "
+                    "`python -m src.negocio.ejecutar` para generarla."
+                )
+            tables[name] = pd.read_csv(
+                path,
+                encoding="utf-8-sig",
+                dtype={"municipality_code": "string"},
+            )
+        source = f"Local · {local_output_dir}"
+
+    required_columns = {
+        "selection": {
+            "municipality_code",
+            "municipality_name",
+            "facturacion_anual",
+            "demanda_por_comp",
+        },
+        "baseline": {
+            "municipality_code",
+            "municipality_name",
+            "facturacion_anual",
+            "demanda_por_comp",
+        },
+        "comparison": {
+            "estrategia",
+            "centros_seleccionados",
+            "centros_viables",
+            "facturacion_anual_total_con_tope_eur",
+            "margen_operativo_anual_total_eur",
+            "perdidas_operativas_totales_eur",
+            "demanda_media_por_competidor",
+        },
+        "robustness": {
+            "municipality_code",
+            "municipality_name",
+            "apariciones",
+            "posicion_media",
+            "robustez",
+            "combinaciones_totales",
+            "fact_min",
+        },
+    }
+    for name in ("selection", "baseline"):
+        required = required_columns[name]
+        table = tables[name]
+        missing = sorted(required.difference(table.columns))
+        if missing:
+            raise ValueError(
+                f"Salida de negocio {BUSINESS_OUTPUTS[name]}: "
+                f"faltan columnas requeridas: {missing}"
+            )
+        codes = table["municipality_code"].astype("string").str.strip()
+        if (
+            codes.isna().any()
+            or not codes.str.fullmatch(r"\d{5}").fillna(False).all()
+            or codes.duplicated().any()
+        ):
+            raise ValueError(
+                f"Salida de negocio {BUSINESS_OUTPUTS[name]}: "
+                "municipality_code debe contener códigos únicos de cinco dígitos."
+            )
+        table["municipality_code"] = codes
+        for column in ("facturacion_anual", "demanda_por_comp"):
+            values = pd.to_numeric(table[column], errors="raise")
+            if not values.map(math.isfinite).all() or values.lt(0).any():
+                raise ValueError(
+                    f"Salida de negocio {BUSINESS_OUTPUTS[name]}: "
+                    f"{column} debe contener valores finitos no negativos."
+                )
+            table[column] = values.astype("float64")
+
+    if len(tables["baseline"]) != 5:
+        raise ValueError("El baseline de negocio debe contener exactamente cinco municipios.")
+    if len(tables["selection"]) > 5:
+        raise ValueError("La selección de negocio no puede superar cinco municipios.")
+
+    comparison = tables["comparison"]
+    missing_comparison = sorted(
+        required_columns["comparison"].difference(comparison.columns)
+    )
+    if missing_comparison:
+        raise ValueError(
+            f"Salida de negocio {BUSINESS_OUTPUTS['comparison']}: "
+            f"faltan columnas requeridas: {missing_comparison}"
+        )
+    comparison["estrategia"] = comparison["estrategia"].astype("string").str.strip()
+    if comparison["estrategia"].isna().any() or comparison[
+        "estrategia"
+    ].duplicated().any():
+        raise ValueError(
+            f"Salida de negocio {BUSINESS_OUTPUTS['comparison']}: "
+            "estrategia debe ser única y no nula."
+        )
+    comparison_rows = comparison.set_index("estrategia")
+    if not {"Baseline", "Modelo A oficial"}.issubset(comparison_rows.index):
+        raise ValueError(
+            f"Salida de negocio {BUSINESS_OUTPUTS['comparison']}: "
+            "debe contener las estrategias Baseline y Modelo A oficial."
+        )
+    for column in required_columns["comparison"] - {"estrategia"}:
+        values = pd.to_numeric(comparison[column], errors="raise")
+        if not values.dropna().map(math.isfinite).all():
+            raise ValueError(
+                f"Salida de negocio {BUSINESS_OUTPUTS['comparison']}: "
+                f"{column} debe contener números finitos."
+            )
+        comparison[column] = values
+    for column in ("centros_seleccionados", "centros_viables"):
+        values = comparison[column]
+        if values.isna().any() or values.lt(0).any() or values.mod(1).ne(0).any():
+            raise ValueError(
+                f"Salida de negocio {BUSINESS_OUTPUTS['comparison']}: "
+                f"{column} debe contener enteros no negativos."
+            )
+
+    robustness = tables["robustness"]
+    missing_robustness = sorted(
+        required_columns["robustness"].difference(robustness.columns)
+    )
+    if missing_robustness:
+        raise ValueError(
+            f"Salida de negocio {BUSINESS_OUTPUTS['robustness']}: "
+            f"faltan columnas requeridas: {missing_robustness}"
+        )
+    robustness_codes = robustness["municipality_code"].astype("string").str.strip()
+    if (
+        robustness_codes.isna().any()
+        or not robustness_codes.str.fullmatch(r"\d{5}").fillna(False).all()
+        or robustness_codes.duplicated().any()
+    ):
+        raise ValueError(
+            f"Salida de negocio {BUSINESS_OUTPUTS['robustness']}: "
+            "municipality_code debe contener códigos únicos de cinco dígitos."
+        )
+    robustness["municipality_code"] = robustness_codes
+    for column in (
+        "apariciones",
+        "posicion_media",
+        "combinaciones_totales",
+        "fact_min",
+    ):
+        values = pd.to_numeric(robustness[column], errors="raise")
+        if (
+            values.isna().any()
+            or not values.map(math.isfinite).all()
+            or values.lt(0).any()
+        ):
+            raise ValueError(
+                f"Salida de negocio {BUSINESS_OUTPUTS['robustness']}: "
+                f"{column} debe contener valores finitos no negativos."
+            )
+        robustness[column] = values
+    if robustness["apariciones"].gt(robustness["combinaciones_totales"]).any():
+        raise ValueError(
+            f"Salida de negocio {BUSINESS_OUTPUTS['robustness']}: "
+            "apariciones no puede superar combinaciones_totales."
+        )
+    if (
+        not robustness.empty
+        and robustness["combinaciones_totales"].nunique() != 1
+    ):
+        raise ValueError(
+            f"Salida de negocio {BUSINESS_OUTPUTS['robustness']}: "
+            "combinaciones_totales debe ser constante."
+        )
+    for column in ("apariciones", "combinaciones_totales"):
+        if robustness[column].mod(1).ne(0).any():
+            raise ValueError(
+                f"Salida de negocio {BUSINESS_OUTPUTS['robustness']}: "
+                f"{column} debe contener enteros."
+            )
+
+    return tables, source
 
 
 def _s3_read_error_message(
