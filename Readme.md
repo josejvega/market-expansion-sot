@@ -74,7 +74,20 @@ Validar actividad y competencia real, incluidos municipios vecinos; estudiar bar
 
 ## 8. Ejecución y uso de IA
 
-**EC2 Linux, desde la raíz:** Python 3.11 recomendado, Internet, bucket S3 y rol IAM con permisos S3 adecuados, sin claves en Git. El equipo confirma ejecución de extremo a extremo; no se ha repetido para esta revisión documental.
+**Requisitos:** Python 3.11 recomendado, Internet, bucket S3 y rol IAM con permisos S3 adecuados, sin claves en Git. El equipo confirma ejecución de extremo a extremo.
+
+**EC2 ya preparada:** conecta desde tu equipo con `ssh ec2-user@<IP_PUBLICA_EC2>`; utiliza la clave SSH autorizada si tu configuración la requiere. Dentro de la instancia, el equipo ejecuta:
+
+```bash
+cd /home/ec2-user/market-expansion-main
+git pull --ff-only
+source /home/ec2-user/market_expansion_github/.venv/bin/activate
+python run.py
+```
+
+El repositorio y el entorno virtual están en carpetas distintas; adapta ambas rutas a tu instancia. Si cambian las dependencias, reinstala los requisitos en el entorno activo.
+
+**Primera instalación:** desde la raíz del repositorio en EC2 Linux, crea un entorno propio:
 
 ```bash
 python3 -m venv .venv
@@ -83,7 +96,7 @@ python -m pip install -r requirements.txt -r streamlit_portable/requirements.txt
 test -f .env || cp .env.example .env
 ```
 
-Configura `.env`: `SAVE_S3=true`, `SAVE_LOCALLY=false`, `S3_BUCKET=tu-bucket` y `AWS_DEFAULT_REGION=region-del-bucket`. Después:
+Configura `.env`: `SAVE_S3=true`, `SAVE_LOCALLY=false`, `S3_BUCKET=tu-bucket` y `AWS_DEFAULT_REGION=region-del-bucket`. Ejecuta el pipeline y, al terminar, inicia la aplicación:
 
 ```bash
 python run.py
