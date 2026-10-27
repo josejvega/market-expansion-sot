@@ -23,6 +23,12 @@ Se considera corroborada una referencia cuando una fuente pública permite ident
 
 **Fecha de revisión:** 26/10/2026, confirmada por el equipo.
 
+La tabla estructurada para publicar en S3 está en
+[validacion_20_gimnasios.csv](validacion_20_gimnasios.csv). Se compiló a mano
+desde la evidencia de [validacion_20_gimnasios.txt](validacion_20_gimnasios.txt);
+no la genera el pipeline de evaluación de competencia. La app la lee
+exclusivamente desde `results/negocio/auditoria_20_gimnasios.csv` en S3.
+
 ## Interpretación para el modelo
 
 OSM se utiliza como fuente de localización de oferta deportiva, no como auditoría completa del mercado. El 100 % de cruce representa asignación espacial a municipios CNIG; no demuestra que todos los puntos sean gimnasios convencionales. La ausencia de un registro OSM tampoco demuestra ausencia de competencia.
