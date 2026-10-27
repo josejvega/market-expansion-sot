@@ -270,8 +270,8 @@ class BusinessOutputsTests(unittest.TestCase):
                 "estrategia": ["Baseline", "Modelo A oficial"],
                 "centros_seleccionados": [5, 5],
                 "centros_viables": [3, 5],
-                "facturacion_anual_total_con_tope_eur": [2500000.0, 3400000.0],
-                "margen_operativo_anual_total_eur": [-100000.0, 600000.0],
+                "facturacion_operativa_total_eur": [2500000.0, 3400000.0],
+                "margen_operativo_total_eur": [-100000.0, 600000.0],
                 "perdidas_operativas_totales_eur": [300000.0, 0.0],
                 "demanda_media_por_competidor": [900.0, 2100.0],
             }

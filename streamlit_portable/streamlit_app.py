@@ -86,10 +86,10 @@ def build_study(
                     "selected": int(summary["centros_seleccionados"]),
                     "viable": int(summary["centros_viables"]),
                     "revenue_eur": float(
-                        summary["facturacion_anual_total_con_tope_eur"]
+                        summary["facturacion_operativa_total_eur"]
                     ),
                     "margin_eur": float(
-                        summary["margen_operativo_anual_total_eur"]
+                        summary["margen_operativo_total_eur"]
                     ),
                     "losses_eur": float(summary["perdidas_operativas_totales_eur"]),
                     "demand_per_competitor": (
