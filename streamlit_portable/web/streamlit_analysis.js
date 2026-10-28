@@ -173,69 +173,121 @@ if (typeof document !== 'undefined') {
     }).join('');
     el('selection-answer').textContent = meta.baseline_description + ' ' + meta.selection_description + ' ' + meta.methodology + ' Una mayor facturacion de escenario no demuestra mejores ventas reales.';
 
-    const finance = DATA.finance || {};
-    setValue('fixed-cost', finance.annual_fixed_cost_eur);
-    setValue('variable-cost', finance.variable_cost_ratio == null ? null : finance.variable_cost_ratio * 100);
-    setValue('finance-ticket', finance.annual_ticket_eur);
-    setValue('capacity', finance.capacity_members);
-    function updateFinance() {
-        const fixed = readNumber('fixed-cost'), variable = readNumber('variable-cost');
-        const ticket = readNumber('finance-ticket'), capacity = readNumber('capacity');
-        const result = marketAnalysis.breakEven(fixed, variable == null ? null : variable / 100, ticket, capacity);
-        el('breakeven-revenue').textContent = result ? money(result.revenue) : 'n/d';
-        el('breakeven-members').textContent = result ? fmt(result.members) : 'n/d';
-        el('profitability-answer').textContent = result ? `El umbral operativo es ${money(result.revenue)} al ano, con ${money(fixed)} de costes fijos y ${fmt(variable, 1)} % de costes variables sobre ventas. ` + (result.members == null ? 'Sin cuota anual no se calcula el numero de abonados.' : `Equivale a ${fmt(result.members)} abonados a la cuota indicada.`) : 'No se puede determinar sin costes fijos anuales y porcentaje de costes variables. El margen de contribucion debe ser positivo.';
-        el('capacity-note').textContent = result?.capacityExceeded ? 'El punto de equilibrio supera la capacidad indicada.' : 'Umbral operativo: no incluye inversion inicial, impuestos ni costes no incorporados a los parametros.';
-        const chart = el('breakeven-chart');
-        if (!result || result.exactMembers == null || !ticket || ticket <= 0) {
-            chart.setAttribute('viewBox', '0 0 820 260');
-            chart.innerHTML = '<text class="empty" x="410" y="130">Introduce costes, porcentaje variable y cuota anual para ver el punto de equilibrio.</text>';
-            return;
+const finance = DATA.finance || {};
+
+/*
+ * CALCULADORA 1
+ * Rentabilidad manual de un centro:
+ * socios inscritos × ticket mensual × 12 − coste anual
+ */
+
+setValue(
+    'finance-members',
+    2071
+);
+
+setValue(
+    'finance-ticket',
+    finance.monthly_ticket_eur ??
+        (
+            finance.annual_ticket_eur != null
+                ? finance.annual_ticket_eur / 12
+                : 22.37
+        )
+);
+
+setValue(
+    'fixed-cost',
+    finance.annual_cost_eur ??
+        finance.annual_fixed_cost_eur ??
+        556000
+);
+
+function updateFinance() {
+    const members =
+        readNumber('finance-members');
+
+    const monthlyTicket =
+        readNumber('finance-ticket');
+
+    const annualCost =
+        readNumber('fixed-cost');
+
+    const valid =
+        Number.isFinite(members) &&
+        Number.isFinite(monthlyTicket) &&
+        Number.isFinite(annualCost) &&
+        members >= 0 &&
+        monthlyTicket >= 0 &&
+        annualCost >= 0;
+
+    if (!valid) {
+        el('breakeven-revenue').textContent =
+            'n/d';
+
+        el('breakeven-members').textContent =
+            'n/d';
+
+        el('profitability-answer').textContent =
+            'Introduce socios, ticket mensual y coste anual válidos.';
+
+        el('capacity-note').textContent =
+            '';
+
+        const chart =
+            el('breakeven-chart');
+
+        if (chart) {
+            chart.innerHTML = '';
+            chart.hidden = true;
         }
-        const width = 820, height = 260;
-        const left = 64, right = 790, top = 18, bottom = 205;
-        const maxMembers = Math.max(capacity || 0, result.exactMembers * 1.2, 1);
-        const maxValue = Math.max(
-            maxMembers * ticket,
-            fixed + maxMembers * ticket * (variable / 100),
-            fixed,
-        ) * 1.12;
-        const x = members => left + members / maxMembers * (right - left);
-        const y = value => bottom - value / maxValue * (bottom - top);
-        const breakX = x(result.exactMembers);
-        const breakY = y(result.revenue);
-        const capacityMarkup = capacity != null && capacity >= 0
-            ? `<line class="capacity-line" x1="${x(capacity)}" y1="${top}" x2="${x(capacity)}" y2="${bottom}"/><text x="${Math.min(x(capacity) + 5, right - 90)}" y="${top + 14}">Capacidad ${fmt(capacity)}</text>`
-            : '';
-        chart.setAttribute('viewBox', `0 0 ${width} ${height}`);
-        chart.setAttribute(
-            'aria-label',
-            `Facturación y costes anuales por abonados. Punto de equilibrio: ${fmt(result.exactMembers)} abonados y ${money(result.revenue)}.`,
-        );
-        chart.innerHTML = `
-            <line class="axis" x1="${left}" y1="${bottom}" x2="${right}" y2="${bottom}"/>
-            <line class="axis" x1="${left}" y1="${top}" x2="${left}" y2="${bottom}"/>
-            <text x="${left}" y="${top - 4}">${money(maxValue)}</text>
-            <text x="${left}" y="${bottom}">0</text>
-            <text x="${right}" y="${bottom + 18}" text-anchor="end">${fmt(maxMembers)} abonados</text>
-            <text x="${left}" y="${top + 14}">EUR/año</text>
-            <path class="revenue-line" d="M ${left} ${bottom} L ${right} ${y(maxMembers * ticket)}"/>
-            <path class="cost-line" d="M ${left} ${y(fixed)} L ${right} ${y(fixed + maxMembers * ticket * (variable / 100))}"/>
-            <line class="break-even-line" x1="${breakX}" y1="${top}" x2="${breakX}" y2="${bottom}"/>
-            ${capacityMarkup}
-            <circle cx="${breakX}" cy="${breakY}" r="5" fill="#a66a00"/>
-            <text x="${Math.min(breakX + 8, right - 145)}" y="${Math.max(breakY - 9, top + 12)}">Equilibrio: ${fmt(result.exactMembers)} · ${money(result.revenue)}</text>
-            <line class="revenue-line" x1="${left}" y1="238" x2="${left + 24}" y2="238"/>
-            <text class="legend" x="${left + 30}" y="242">Facturación</text>
-            <line class="cost-line" x1="${left + 150}" y1="238" x2="${left + 174}" y2="238"/>
-            <text class="legend" x="${left + 180}" y="242">Costes totales</text>
-            <line class="break-even-line" x1="${left + 310}" y1="238" x2="${left + 334}" y2="238"/>
-            <text class="legend" x="${left + 340}" y="242">Punto de equilibrio</text>
-            ${capacityMarkup ? '<line class="capacity-line" x1="600" y1="238" x2="624" y2="238"/><text class="legend" x="630" y="242">Capacidad</text>' : ''}
-        `;
+
+        return;
     }
-    for (const id of ['fixed-cost', 'variable-cost', 'finance-ticket', 'capacity']) el(id).addEventListener('input', updateFinance);
-    updateFinance();
+
+    const revenue =
+        members * monthlyTicket * 12;
+
+    const margin =
+        revenue - annualCost;
+
+    el('breakeven-revenue').textContent =
+        money(revenue);
+
+    el('breakeven-members').textContent =
+        money(margin);
+
+    el('profitability-answer').textContent =
+        margin >= 0
+            ? `Centro viable: margen operativo de ${money(margin)}.`
+            : `Centro no viable: margen operativo de ${money(margin)}.`;
+
+    el('capacity-note').textContent =
+        `${fmt(members)} socios × ` +
+        `${fmt(monthlyTicket, 2)} EUR/mes × 12 = ` +
+        `${money(revenue)} de facturación anual.`;
+
+    const chart =
+        el('breakeven-chart');
+
+    if (chart) {
+        chart.innerHTML = '';
+        chart.hidden = true;
+    }
+}
+
+for (const id of [
+    'finance-members',
+    'finance-ticket',
+    'fixed-cost'
+]) {
+    el(id).addEventListener(
+        'input',
+        updateFinance
+    );
+}
+
+updateFinance();
 
 const simulation = DATA.simulation;
 
