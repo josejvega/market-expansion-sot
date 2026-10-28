@@ -1,5 +1,8 @@
 # Market Expansion SOT · Gimnasios en Andalucía
 
+DEMO: http://streamlit-649496031.eu-north-1.elb.amazonaws.com/
+
+Disponible públicamente mediante un Load Balancer, con la aplicación desplegada en EC2 y consumiendo datos de S3 en tiempo real.
 ## 1. Problema y decisión
 
 El equipo de expansión debe elegir **cinco municipios para abrir gimnasios low-cost**, mejorando una decisión basada en visitas y experiencia. El proyecto compara demanda y competencia, identifica mercados similares y estima la viabilidad de un centro por municipio. **Son escenarios de apoyo a la decisión, no ventas previstas ni garantías de rentabilidad.**
