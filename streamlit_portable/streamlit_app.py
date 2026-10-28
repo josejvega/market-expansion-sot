@@ -245,8 +245,6 @@ def build_study(
             f"{'cuota por atractivo' if revenue_rule == 'C' else 'demanda no cubierta'}. "
             "Facturación anual estimada = socios estimados en el centro × "
             "cuota mensual sin IVA × 12 meses. "
-            "La facturación se calcula con los supuestos del módulo de negocio; "
-            "no son ventas observadas."
         ),
         "is_demo": False,
         "assumptions": [
@@ -412,10 +410,7 @@ def build_study(
                 "revenue_low_eur": None,
                 "revenue_high_eur": None,
                 "score": None,
-                "coverage_note": (
-                    "Recuento de instalaciones de Gold; no verifica la ausencia "
-                    "de competencia."
-                ),
+
             }
         )
 
