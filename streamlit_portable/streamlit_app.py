@@ -395,17 +395,17 @@ def build_study(
 "annual_revenue_eur": (
     float(business_row["facturacion_sin_tope_capacidad"])
     if business_row is not None
-    else float(row["facturacion_sin_tope_capacidad"])
-),"annual_cost_eur": (
+    else float(row["facturacion_anual"])
+),
+"annual_cost_eur": (
     float(business_row["coste_anual_escalado"])
     if business_row is not None
-    else float(row["coste_anual_escalado"])
+    else None
 ),
-
 "annual_margin_eur": (
     float(business_row["margen_escalado_eur"])
     if business_row is not None
-    else float(row["margen_escalado_eur"])
+    else None
 ),
                 "revenue_low_eur": None,
                 "revenue_high_eur": None,
