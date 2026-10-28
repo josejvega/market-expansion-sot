@@ -394,56 +394,84 @@
 
       </section>
 
-<div class="controls-grid">
+<!-- Punto de equilibrio -->
 
-  <label>
-    Socios inscritos
-    <input
-      id="finance-members"
-      type="number"
-      min="0"
-      step="1"
-      value="2071">
-  </label>
+<section class="analysis-band">
 
-  <label>
-    Ticket mensual sin IVA (EUR)
-    <input
-      id="finance-ticket"
-      type="number"
-      min="0"
-      step="0.01"
-      value="22.37">
-  </label>
+  <h2>Punto de equilibrio operativo</h2>
 
-  <label>
-    Coste anual (EUR)
-    <input
-      id="fixed-cost"
-      type="number"
-      min="0"
-      step="1000"
-      value="556000">
-  </label>
+  <p class="caption">
+    Introduce los socios inscritos, el ticket mensual y el coste anual
+    para evaluar la rentabilidad operativa del centro.
+  </p>
 
-</div>
+  <div class="controls-grid">
 
-<div class="scenario-summary">
+    <label>
+      Socios inscritos
+      <input
+        id="finance-members"
+        type="number"
+        min="0"
+        step="1"
+        value="2071">
+    </label>
 
-  <div>
-    <strong id="breakeven-revenue">n/d</strong>
-    <span>Facturación anual</span>
+    <label>
+      Ticket mensual sin IVA (EUR)
+      <input
+        id="finance-ticket"
+        type="number"
+        min="0"
+        step="0.01"
+        value="22.37">
+    </label>
+
+    <label>
+      Coste anual (EUR)
+      <input
+        id="fixed-cost"
+        type="number"
+        min="0"
+        step="1000"
+        value="556000">
+    </label>
+
   </div>
 
-  <div>
-    <strong id="breakeven-members">n/d</strong>
-    <span>Margen operativo</span>
+  <div class="scenario-summary">
+
+    <div>
+      <strong id="breakeven-revenue">n/d</strong>
+      <span>Facturación anual</span>
+    </div>
+
+    <div>
+      <strong id="breakeven-members">n/d</strong>
+      <span>Margen operativo</span>
+    </div>
+
   </div>
 
-</div>
+  <p
+    id="profitability-answer"
+    class="caption"
+    role="status">
+  </p>
 
-<p id="capacity-note" class="caption"></p>
+  <p
+    id="capacity-note"
+    class="caption">
+  </p>
 
+  <svg
+    id="breakeven-chart"
+    class="breakeven-chart"
+    role="img"
+    aria-label="Facturación, coste anual y punto de equilibrio">
+  </svg>
+
+</section>
       <!-- Preguntas -->
 
       <section class="analysis-band">

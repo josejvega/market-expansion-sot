@@ -234,13 +234,180 @@ function updateFinance() {
         el('capacity-note').textContent =
             '';
 
-        const chart =
-            el('breakeven-chart');
+const chart = el('breakeven-chart');
 
-        if (chart) {
-            chart.innerHTML = '';
-            chart.hidden = true;
-        }
+if (chart) {
+    chart.hidden = false;
+
+    const breakEvenMembers =
+        annualCost / (monthlyTicket * 12);
+
+    const width = 820;
+    const height = 260;
+
+    const left = 64;
+    const right = 790;
+    const top = 18;
+    const bottom = 205;
+
+    const maxMembers =
+        Math.max(
+            members,
+            breakEvenMembers * 1.35,
+            2600
+        );
+
+    const maxRevenue =
+        maxMembers * monthlyTicket * 12;
+
+    const maxValue =
+        Math.max(
+            maxRevenue,
+            annualCost
+        ) * 1.12;
+
+    const x = value =>
+        left +
+        value / maxMembers *
+        (right - left);
+
+    const y = value =>
+        bottom -
+        value / maxValue *
+        (bottom - top);
+
+    const breakX =
+        x(breakEvenMembers);
+
+    const breakY =
+        y(annualCost);
+
+    const currentX =
+        x(members);
+
+    const currentY =
+        y(revenue);
+
+    chart.setAttribute(
+        'viewBox',
+        `0 0 ${width} ${height}`
+    );
+
+    chart.innerHTML = `
+        <line
+            class="axis"
+            x1="${left}"
+            y1="${bottom}"
+            x2="${right}"
+            y2="${bottom}"
+        />
+
+        <line
+            class="axis"
+            x1="${left}"
+            y1="${top}"
+            x2="${left}"
+            y2="${bottom}"
+        />
+
+        <path
+            class="revenue-line"
+            d="M ${left} ${bottom}
+               L ${right} ${y(maxRevenue)}"
+        />
+
+        <path
+            class="cost-line"
+            d="M ${left} ${y(annualCost)}
+               L ${right} ${y(annualCost)}"
+        />
+
+        <line
+            class="break-even-line"
+            x1="${breakX}"
+            y1="${top}"
+            x2="${breakX}"
+            y2="${bottom}"
+        />
+
+        <circle
+            cx="${breakX}"
+            cy="${breakY}"
+            r="6"
+            fill="#a66a00"
+        />
+
+        <text
+            x="${Math.min(breakX + 8, right - 190)}"
+            y="${Math.max(breakY - 10, top + 14)}"
+        >
+            Punto de equilibrio:
+            ${fmt(breakEvenMembers, 1)} socios
+        </text>
+
+        <circle
+            cx="${currentX}"
+            cy="${currentY}"
+            r="5"
+            fill="#a100ff"
+        />
+
+        <text
+            x="${Math.min(currentX + 8, right - 150)}"
+            y="${Math.max(currentY - 10, top + 14)}"
+        >
+            Actual: ${fmt(members)} socios
+        </text>
+
+        <line
+            class="revenue-line"
+            x1="${left}"
+            y1="238"
+            x2="${left + 24}"
+            y2="238"
+        />
+
+        <text
+            class="legend"
+            x="${left + 30}"
+            y="242"
+        >
+            Facturación
+        </text>
+
+        <line
+            class="cost-line"
+            x1="${left + 160}"
+            y1="238"
+            x2="${left + 184}"
+            y2="238"
+        />
+
+        <text
+            class="legend"
+            x="${left + 190}"
+            y="242"
+        >
+            Coste anual
+        </text>
+
+        <line
+            class="break-even-line"
+            x1="${left + 310}"
+            y1="238"
+            x2="${left + 334}"
+            y2="238"
+        />
+
+        <text
+            class="legend"
+            x="${left + 340}"
+            y="242"
+        >
+            Punto de equilibrio
+        </text>
+    `;
+}
 
         return;
     }
