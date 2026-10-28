@@ -390,116 +390,39 @@
 
       </section>
 
-      <!-- Punto de equilibrio -->
+<div class="controls-grid">
 
-      <section class="analysis-band">
+  <label>
+    Socios inscritos
+    <input
+      id="finance-members"
+      type="number"
+      min="0"
+      step="1"
+      value="2071">
+  </label>
 
-        <h2>Punto de equilibrio operativo</h2>
+  <label>
+    Ticket mensual sin IVA (EUR)
+    <input
+      id="finance-ticket"
+      type="number"
+      min="0"
+      step="0.01"
+      value="22.37">
+  </label>
 
-        <div
-          class="estimate-equation"
-          role="math"
-          aria-label="Facturación mínima anual igual a costes fijos anuales dividido entre uno menos el porcentaje de costes variables sobre ventas">
+  <label>
+    Coste anual (EUR)
+    <input
+      id="fixed-cost"
+      type="number"
+      min="0"
+      step="1000"
+      value="556000">
+  </label>
 
-          <span class="equation-label">
-            Facturación mínima anual =
-          </span>
-
-          <span class="fraction">
-            <span class="numerator">
-              Costes fijos anuales
-            </span>
-
-            <span class="denominator">
-              1 − porcentaje de costes variables sobre ventas
-            </span>
-          </span>
-
-        </div>
-
-        <p class="caption">
-          Abonados para cubrir costes =
-          facturación mínima anual ÷ cuota anual por abonado.
-        </p>
-
-        <div class="controls-grid">
-
-          <label>
-            Costes fijos anuales (EUR)
-            <input
-              id="fixed-cost"
-              type="number"
-              min="0"
-              step="1000"
-              placeholder="Sin dato">
-          </label>
-
-          <label>
-            Costes variables (% de ventas)
-            <input
-              id="variable-cost"
-              type="number"
-              min="0"
-              max="100"
-              step="1"
-              placeholder="5">
-          </label>
-
-          <label>
-            Cuota anual por abonado (EUR)
-            <input
-              id="finance-ticket"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="Sin dato">
-          </label>
-
-          <label>
-            Capacidad maxima (abonados)
-            <input
-              id="capacity"
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Sin dato">
-          </label>
-
-        </div>
-
-        <div class="scenario-summary">
-
-          <div>
-            <strong id="breakeven-revenue">n/d</strong>
-            <span>Facturacion anual minima</span>
-          </div>
-
-          <div>
-            <strong id="breakeven-members">n/d</strong>
-            <span>Abonados para cubrir costes</span>
-          </div>
-
-        </div>
-
-        <svg
-          id="breakeven-chart"
-          class="breakeven-chart"
-          role="img"
-          aria-label="Gráfica del punto de equilibrio">
-        </svg>
-
-        <p
-          class="caption"
-          id="profitability-answer"
-          role="status">
-        </p>
-
-        <p
-          class="caption"
-          id="capacity-note">
-        </p>
-
-      </section>
+</div>
 
       <!-- Preguntas -->
 
@@ -615,137 +538,86 @@
 
       <div class="intelligence">
 
-        <!-- METODO -->
+<!-- METODO -->
 
-        <section>
+<section>
 
-          <h2>Método del estudio</h2>
+  <h2>Método del estudio</h2>
 
-          <div class="method-step">
+  <div class="method-step">
 
-            <div class="method-step-title">
-              <span class="method-number">1</span>
-              <strong>
-                Agrupación de municipios comparables
-              </strong>
-            </div>
+    <div class="method-step-title">
+      <span class="method-number">1</span>
+      <strong>Municipios comparables</strong>
+    </div>
 
-            <p>
-              Aplicamos <strong>K-means (k = 4)</strong>
-              utilizando población objetivo, renta y crecimiento
-              poblacional.
-            </p>
+    <p>
+      K-means (k = 4) agrupa municipios según
+      <strong>población 18–50, renta y crecimiento</strong>.
+    </p>
 
-            <div class="method-equations">
-              <div>
-                x₁ = log(1 + Población<sub>18–50</sub>)
-              </div>
-
-              <div>
-                x₂ = Renta neta media por persona
-              </div>
-
-              <div>
-                x₃ = Crecimiento de la población
-              </div>
-            </div>
-
-            <p class="caption">
-              Estandarización previa de las variables:
-            </p>
-
-            <div class="method-main-equation">
-              z =
-              <span class="fraction">
-                <span class="numerator">x − μ</span>
-                <span class="denominator">σ</span>
-              </span>
-            </div>
-
-          </div>
+  </div>
 
 
-          <div class="method-step">
+  <div class="method-step">
 
-            <div class="method-step-title">
-              <span class="method-number">2</span>
-              <strong>Presión competitiva</strong>
-            </div>
+    <div class="method-step-title">
+      <span class="method-number">2</span>
+      <strong>Competencia relativa</strong>
+    </div>
 
-            <p>
-              Calculamos la competencia ponderada de cada municipio:
-            </p>
+    <p>
+      Calculamos los competidores equivalentes por cada
+      10.000 personas de 18–50 años:
+    </p>
 
-            <div class="method-main-equation">
-              C<sub>i</sub> =
-              Gimnasios + 0,1 × Otras instalaciones deportivas
-            </div>
+    <div class="method-main-equation">
 
-            <p class="caption">
-              Después la normalizamos por el tamaño del público objetivo:
-            </p>
+      D =
+      <span class="fraction">
 
-            <div class="method-main-equation">
+        <span class="numerator">
+          Gimnasios + 0,1 × Otras instalaciones
+        </span>
 
-              D<sub>i</sub> =
+        <span class="denominator">
+          Población<sub>18–50</sub>
+        </span>
 
-              <span class="fraction">
+      </span>
+      × 10.000
 
-                <span class="numerator">
-                  C<sub>i</sub>
-                </span>
+    </div>
 
-                <span class="denominator">
-                  Población<sub>18–50,i</sub>
-                </span>
-
-              </span>
-
-              × 10.000
-
-            </div>
-
-            <p class="caption">
-              Competidores ponderados por cada 10.000 personas
-              de 18–50 años.
-            </p>
-
-          </div>
+  </div>
 
 
-          <div class="method-step">
+  <div class="method-step">
 
-            <div class="method-step-title">
-              <span class="method-number">3</span>
-              <strong>Identificación de oportunidades</strong>
-            </div>
+    <div class="method-step-title">
+      <span class="method-number">3</span>
+      <strong>Oportunidades</strong>
+    </div>
 
-            <p>
-              Comparamos cada municipio con la presión competitiva
-              media de su propio cluster:
-            </p>
+    <p>
+      Son candidatos los municipios con
+      <strong>menor presión competitiva que la media de su cluster</strong>.
+    </p>
 
-            <div class="method-decision-equation">
-              D<sub>i</sub>
-              <span class="method-less">&lt;</span>
-              D̄<sub>cluster(i)</sub>
-            </div>
+    <div class="method-decision-equation">
+      D<sub>i</sub>
+      <span class="method-less">&lt;</span>
+      D̄<sub>cluster(i)</sub>
+    </div>
 
-            <div class="method-result">
-              Menor presión competitiva que la media del cluster
-              <strong>→ candidato potencial</strong>
-            </div>
+    <p class="caption">
+      Después se filtran por viabilidad económica y calidad del dato
+      para obtener la recomendación final.
+    </p>
 
-            <p class="caption">
-              Finalmente, los candidatos se filtran por viabilidad
-              y calidad del dato y se ordenan por facturación anual
-              estimada considerando la capacidad del centro.
-            </p>
+  </div>
 
-          </div>
-
-        </section>
-
+</section>
 
         <!-- OFERTA POR GRUPO -->
 
