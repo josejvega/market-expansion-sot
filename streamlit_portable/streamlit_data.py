@@ -531,17 +531,24 @@ def load_business_outputs(
 
     required_columns = {
         "selection": {
-            "municipality_code",
-            "municipality_name",
-            "facturacion_anual",
-            "demanda_por_comp",
-        },
-        "baseline": {
-            "municipality_code",
-            "municipality_name",
-            "facturacion_anual",
-            "demanda_por_comp",
-        },
+    "municipality_code",
+    "municipality_name",
+    "facturacion_anual",
+    "facturacion_sin_tope_capacidad",
+    "coste_anual_escalado",
+    "margen_escalado_eur",
+    "demanda_por_comp",
+},
+"baseline": {
+    "municipality_code",
+    "municipality_name",
+    "facturacion_anual",
+    "facturacion_sin_tope_capacidad",
+    "coste_anual_escalado",
+    "margen_escalado_eur",
+    "demanda_por_comp",
+}
+,
         "comparison": {
             "estrategia",
             "centros_seleccionados",
@@ -581,7 +588,14 @@ def load_business_outputs(
                 "municipality_code debe contener códigos únicos de cinco dígitos."
             )
         table["municipality_code"] = codes
-        for column in ("facturacion_anual", "demanda_por_comp"):
+        for column in (
+    "facturacion_anual",
+    "facturacion_sin_tope_capacidad",
+    "coste_anual_escalado",
+    "margen_escalado_eur",
+    "demanda_por_comp",
+):
+
             values = pd.to_numeric(table[column], errors="raise")
             if not values.map(math.isfinite).all() or values.lt(0).any():
                 raise ValueError(
