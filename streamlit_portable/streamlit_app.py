@@ -400,11 +400,13 @@ def build_study(
 "annual_cost_eur": (
     float(business_row["coste_anual_escalado"])
     if business_row is not None
+    and "coste_anual_escalado" in business_row
     else None
 ),
 "annual_margin_eur": (
     float(business_row["margen_escalado_eur"])
     if business_row is not None
+    and "margen_escalado_eur" in business_row
     else None
 ),
                 "revenue_low_eur": None,
