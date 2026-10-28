@@ -218,29 +218,60 @@ function updateFinance() {
         Number.isFinite(monthlyTicket) &&
         Number.isFinite(annualCost) &&
         members >= 0 &&
-        monthlyTicket >= 0 &&
+        monthlyTicket > 0 &&
         annualCost >= 0;
 
-    if (!valid) {
-        el('breakeven-revenue').textContent =
-            'n/d';
+    const chart =
+        el('breakeven-chart');
 
-        el('breakeven-members').textContent =
-            'n/d';
+    if (!valid) {
+        el('breakeven-revenue').textContent = 'n/d';
+        el('breakeven-members').textContent = 'n/d';
 
         el('profitability-answer').textContent =
             'Introduce socios, ticket mensual y coste anual válidos.';
 
-        el('capacity-note').textContent =
-            '';
+        el('capacity-note').textContent = '';
 
-const chart = el('breakeven-chart');
+        if (chart) {
+            chart.innerHTML = '';
+            chart.hidden = true;
+        }
 
-if (chart) {
-    chart.hidden = false;
+        return;
+    }
+
+    const revenue =
+        members * monthlyTicket * 12;
+
+    const margin =
+        revenue - annualCost;
 
     const breakEvenMembers =
         annualCost / (monthlyTicket * 12);
+
+    el('breakeven-revenue').textContent =
+        money(revenue);
+
+    el('breakeven-members').textContent =
+        money(margin);
+
+    el('profitability-answer').textContent =
+        margin >= 0
+            ? `Centro viable: margen operativo de ${money(margin)}.`
+            : `Centro no viable: margen operativo de ${money(margin)}.`;
+
+    el('capacity-note').textContent =
+        `${fmt(members)} socios × ` +
+        `${fmt(monthlyTicket, 2)} EUR/mes × 12 = ` +
+        `${money(revenue)} de facturación anual. ` +
+        `Punto de equilibrio: ${fmt(breakEvenMembers, 1)} socios.`;
+
+    if (!chart) {
+        return;
+    }
+
+    chart.hidden = false;
 
     const width = 820;
     const height = 260;
@@ -293,6 +324,12 @@ if (chart) {
         `0 0 ${width} ${height}`
     );
 
+    chart.setAttribute(
+        'aria-label',
+        `Facturación y coste anual. ` +
+        `Punto de equilibrio: ${fmt(breakEvenMembers, 1)} socios.`
+    );
+
     chart.innerHTML = `
         <line
             class="axis"
@@ -309,6 +346,25 @@ if (chart) {
             x2="${left}"
             y2="${bottom}"
         />
+
+        <text
+            x="${left}"
+            y="${top + 12}">
+            ${money(maxValue)}
+        </text>
+
+        <text
+            x="${left}"
+            y="${bottom}">
+            0
+        </text>
+
+        <text
+            x="${right}"
+            y="${bottom + 18}"
+            text-anchor="end">
+            ${fmt(maxMembers)} socios
+        </text>
 
         <path
             class="revenue-line"
@@ -339,23 +395,20 @@ if (chart) {
 
         <text
             x="${Math.min(breakX + 8, right - 190)}"
-            y="${Math.max(breakY - 10, top + 14)}"
-        >
-            Punto de equilibrio:
-            ${fmt(breakEvenMembers, 1)} socios
+            y="${Math.max(breakY - 10, top + 14)}">
+            Equilibrio: ${fmt(breakEvenMembers, 1)} socios
         </text>
 
         <circle
             cx="${currentX}"
             cy="${currentY}"
-            r="5"
+            r="6"
             fill="#a100ff"
         />
 
         <text
-            x="${Math.min(currentX + 8, right - 150)}"
-            y="${Math.max(currentY - 10, top + 14)}"
-        >
+            x="${Math.min(currentX + 8, right - 140)}"
+            y="${Math.max(currentY - 10, top + 14)}">
             Actual: ${fmt(members)} socios
         </text>
 
@@ -370,8 +423,7 @@ if (chart) {
         <text
             class="legend"
             x="${left + 30}"
-            y="242"
-        >
+            y="242">
             Facturación
         </text>
 
@@ -386,8 +438,7 @@ if (chart) {
         <text
             class="legend"
             x="${left + 190}"
-            y="242"
-        >
+            y="242">
             Coste anual
         </text>
 
@@ -402,47 +453,11 @@ if (chart) {
         <text
             class="legend"
             x="${left + 340}"
-            y="242"
-        >
+            y="242">
             Punto de equilibrio
         </text>
     `;
 }
-
-        return;
-    }
-
-    const revenue =
-        members * monthlyTicket * 12;
-
-    const margin =
-        revenue - annualCost;
-
-    el('breakeven-revenue').textContent =
-        money(revenue);
-
-    el('breakeven-members').textContent =
-        money(margin);
-
-    el('profitability-answer').textContent =
-        margin >= 0
-            ? `Centro viable: margen operativo de ${money(margin)}.`
-            : `Centro no viable: margen operativo de ${money(margin)}.`;
-
-    el('capacity-note').textContent =
-        `${fmt(members)} socios × ` +
-        `${fmt(monthlyTicket, 2)} EUR/mes × 12 = ` +
-        `${money(revenue)} de facturación anual.`;
-
-    const chart =
-        el('breakeven-chart');
-
-    if (chart) {
-        chart.innerHTML = '';
-        chart.hidden = true;
-    }
-}
-
 for (const id of [
     'finance-members',
     'finance-ticket',
