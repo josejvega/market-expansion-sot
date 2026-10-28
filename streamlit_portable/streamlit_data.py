@@ -596,13 +596,21 @@ def load_business_outputs(
     "demanda_por_comp",
 ):
 
-            values = pd.to_numeric(table[column], errors="raise")
-            if not values.map(math.isfinite).all() or values.lt(0).any():
-                raise ValueError(
-                    f"Salida de negocio {BUSINESS_OUTPUTS[name]}: "
-                    f"{column} debe contener valores finitos no negativos."
-                )
-            table[column] = values.astype("float64")
+values = pd.to_numeric(table[column], errors="raise")
+
+if not values.map(math.isfinite).all():
+    raise ValueError(
+        f"Salida de negocio {BUSINESS_OUTPUTS[name]}: "
+        f"{column} debe contener valores finitos."
+    )
+
+if column != "margen_escalado_eur" and values.lt(0).any():
+    raise ValueError(
+        f"Salida de negocio {BUSINESS_OUTPUTS[name]}: "
+        f"{column} debe contener valores no negativos."
+    )
+
+table[column] = values.astype("float64")
 
     if len(tables["baseline"]) != 5:
         raise ValueError("El baseline de negocio debe contener exactamente cinco municipios.")
