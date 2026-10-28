@@ -588,29 +588,35 @@ def load_business_outputs(
                 "municipality_code debe contener códigos únicos de cinco dígitos."
             )
         table["municipality_code"] = codes
+
         for column in (
-    "facturacion_anual",
-    "facturacion_sin_tope_capacidad",
-    "coste_anual_escalado",
-    "margen_escalado_eur",
-    "demanda_por_comp",
-):
+            "facturacion_anual",
+            "facturacion_sin_tope_capacidad",
+            "coste_anual_escalado",
+            "margen_escalado_eur",
+            "demanda_por_comp",
+        ):
+            values = pd.to_numeric(
+                table[column],
+                errors="raise",
+            )
 
-    values = pd.to_numeric(table[column], errors="raise")
+            if not values.map(math.isfinite).all():
+                raise ValueError(
+                    f"Salida de negocio {BUSINESS_OUTPUTS[name]}: "
+                    f"{column} debe contener valores finitos."
+                )
 
-    if not values.map(math.isfinite).all():
-        raise ValueError(
-            f"Salida de negocio {BUSINESS_OUTPUTS[name]}: "
-            f"{column} debe contener valores finitos."
-        )
+            if (
+                column != "margen_escalado_eur"
+                and values.lt(0).any()
+            ):
+                raise ValueError(
+                    f"Salida de negocio {BUSINESS_OUTPUTS[name]}: "
+                    f"{column} debe contener valores no negativos."
+                )
 
-    if column != "margen_escalado_eur" and values.lt(0).any():
-        raise ValueError(
-            f"Salida de negocio {BUSINESS_OUTPUTS[name]}: "
-            f"{column} debe contener valores no negativos."
-        )
-
-    table[column] = values.astype("float64")
+            table[column] = values.astype("float64")
 
     if len(tables["baseline"]) != 5:
         raise ValueError("El baseline de negocio debe contener exactamente cinco municipios.")
