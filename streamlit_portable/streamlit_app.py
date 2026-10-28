@@ -167,126 +167,56 @@ def build_study(
             "repositorio. Las cifras económicas son escenarios, no previsiones."
         ),
         "methodology": (
-    "1 · AGRUPACIÓN DE MUNICIPIOS COMPARABLES\n\n"
-    "K-means (k = 4) utilizando tres variables:\n\n"
-    "x₁ = log(1 + Población 18–50)\n"
-    "x₂ = Renta neta media por persona\n"
-    "x₃ = Crecimiento de la población\n\n"
-    "Las variables se estandarizan antes de calcular las distancias:\n"
-    "z = (x − μ) / σ\n\n"
-    "2 · PRESIÓN COMPETITIVA\n\n"
-    "Calculamos la competencia ponderada de cada municipio:\n"
-    "Cᵢ = Gimnasios + 0,1 × Otras instalaciones deportivas\n\n"
-    "y la normalizamos por el tamaño del público objetivo:\n"
-    "Dᵢ = (Cᵢ / Población 18–50ᵢ) × 10.000\n\n"
-    "Dᵢ representa los competidores ponderados por cada 10.000 "
-    "personas de 18–50 años.\n\n"
-    "3 · IDENTIFICACIÓN DE OPORTUNIDADES\n\n"
-    "Cada municipio se compara con la media de su propio cluster:\n"
-    "Dᵢ < D̄cluster(i)\n\n"
-    "Menor presión competitiva que la media de su cluster → "
-    "candidato potencial.\n\n"
-    "Finalmente, los candidatos se filtran por viabilidad y calidad "
-    "del dato y se ordenan por facturación anual estimada, considerando "
-    "la capacidad del centro."
+    "1 · MUNICIPIOS COMPARABLES\n"
+    "K-means (k = 4) agrupa municipios según población 18–50, "
+    "renta y crecimiento.\n\n"
+
+    "2 · COMPETENCIA RELATIVA\n"
+    "Calculamos los competidores equivalentes por cada 10.000 personas objetivo:\n"
+    "D = [(Gimnasios + 0,1 × Otras instalaciones) / Población 18–50] × 10.000\n\n"
+
+    "3 · OPORTUNIDADES\n"
+    "Son candidatos los municipios con menor presión competitiva que la media "
+    "de su cluster. Después se filtran por viabilidad económica y calidad "
+    "del dato para obtener la recomendación final."
 ),
-        "business_formulas": [
-            {
-                "label": "Competencia ponderada",
-                "expression": (
-                    "gimnasios × 1 + otras instalaciones × 0,1"
-                ),
-                "detail": (
-                    "Pesos del escenario central; Gold agrupa las otras "
-                    "instalaciones deportivas."
-                ),
-            },
-            {
-                "label": "Tasa para comparar dentro del cluster",
-                "expression": (
-                    "competencia ponderada ÷ población de 18–50 × 10.000"
-                ),
-                "detail": (
-                    "Candidato si su tasa es inferior a la media de su cluster."
-                ),
-            },
-            {
-                "label": "Control mínimo de calidad OSM",
-                "expression": (
-                    "competencia ponderada ÷ "
-                    "(población de 18–50 ÷ 10.000) ≥ 50 %"
-                ),
-                "detail": (
-                    "Si no supera el umbral, el municipio se deja pendiente "
-                    "de validar con una segunda fuente."
-                ),
-            },
-            {
-                "label": "Demanda potencial",
-                "expression": (
-                    "población de 18–50 × penetración "
-                    f"({format_number_es(params['penetracion'] * 100, 1)} %)"
-                ),
-                "detail": "Estimación de socios potenciales del mercado.",
-            },
-            {
-                "label": "Valor teórico del mercado anual",
-                "expression": (
-                    "demanda potencial × "
-                    f"{format_number_es(params['ticket_mensual'], 2)} € "
-                    "al mes sin IVA × 12"
-                ),
-                "detail": (
-                    "Potencial del mercado antes de repartir captación y "
-                    "aplicar la capacidad; no equivale a facturación del centro."
-                ),
-            },
-            {
-                "label": "Cuota captada",
-                "expression": (
-                    "mínimo("
-                    f"{format_number_es(params['atractivo_nuevo'], 2)} ÷ "
-                    "(competencia ponderada + "
-                    f"{format_number_es(params['atractivo_nuevo'], 2)}), "
-                    f"{format_number_es(params['cuota_max'] * 100, 0)} %)"
-                ),
-                "detail": (
-                    "2,18 representa el atractivo relativo supuesto para un "
-                    "nuevo centro low-cost."
-                ),
-            },
-            {
-                "label": "Socios captables / centro",
-                "expression": "demanda potencial × cuota captada",
-                "detail": "Captación estimada antes de aplicar el límite físico.",
-            },
-            {
-                "label": "Socios efectivos del centro",
-                "expression": (
-                    "mínimo(socios captables, capacidad de "
-                    f"{format_number_es(params['capacidad'])})"
-                ),
-                "detail": "La capacidad limita las ventas atribuibles a un centro.",
-            },
-            {
-                "label": "Facturación anual estimada",
-                "expression": (
-                    "socios efectivos × "
-                    f"{format_number_es(params['ticket_mensual'], 2)} € "
-                    "al mes sin IVA × 12"
-                ),
-                "detail": "Escenario económico; no son ventas observadas.",
-            },
-            {
-                "label": "Margen operativo estimado",
-                "expression": (
-                    "facturación anual − "
-                    f"{format_number_es(params['coste_anual_club'])} € "
-                    "de coste anual"
-                ),
-                "detail": "Viable en el escenario central si el margen es ≥ 0.",
-            },
-        ],
+"business_formulas": [
+    {
+        "label": "Socios potenciales",
+        "expression": (
+            "población de 18–50 × penetración "
+            f"({format_number_es(params['penetracion'] * 100, 1)} %)"
+        ),
+        "detail": "Mercado potencial estimado.",
+    },
+    {
+        "label": "Cuota estimada",
+        "expression": (
+            "mínimo("
+            f"{format_number_es(params['atractivo_nuevo'], 2)} ÷ "
+            "(competencia ponderada + "
+            f"{format_number_es(params['atractivo_nuevo'], 2)}), "
+            f"{format_number_es(params['cuota_max'] * 100, 0)} %)"
+        ),
+        "detail": "Determina la parte del mercado potencial que podría captar el centro.",
+    },
+    {
+        "label": "Facturación anual",
+        "expression": (
+            "socios captables × "
+            f"{format_number_es(params['ticket_mensual'], 2)} € × 12"
+        ),
+        "detail": "Potencial anual estimado sin límite de capacidad.",
+    },
+    {
+        "label": "Margen escalado",
+        "expression": (
+            "facturación − 556.000 × "
+            "(0,6 + 0,4 × socios captables ÷ 2.600)"
+        ),
+        "detail": "El coste se escala con el volumen de socios captables.",
+    },
+],
         "baseline_description": (
             "Baseline de negocio publicado: cinco municipios con mayor población "
             "de 18–50 años dentro de los municipios asignados por el modelo."
