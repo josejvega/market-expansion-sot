@@ -313,14 +313,16 @@
           <div class="table-wrap">
             <table>
               <thead>
-                <tr>
-                  <th>#</th>
-                  <th class="name">Municipio</th>
-                  <th>Demanda /<br>competidor</th>
-                  <th>Facturacion<br>anual por centro</th>
-                  <th class="name">Motivo</th>
-                </tr>
-              </thead>
+  <tr>
+    <th>#</th>
+    <th class="name">Municipio</th>
+    <th>Demanda /<br>competidor</th>
+    <th>Facturación<br>anual</th>
+    <th>Coste<br>anual</th>
+    <th>Margen<br>escalado</th>
+    <th class="name">Motivo</th>
+  </tr>
+</thead>
 
               <tbody id="selected-rows"></tbody>
             </table>
@@ -367,13 +369,15 @@
 
             <div class="table-wrap">
               <table>
-                <thead>
-                  <tr>
-                    <th>Municipio</th>
-                    <th>Demanda /<br>competidor</th>
-                    <th>Facturacion anual<br>por centro</th>
-                  </tr>
-                </thead>
+<thead>
+  <tr>
+    <th>Municipio</th>
+    <th>Demanda /<br>competidor</th>
+    <th>Facturación<br>anual</th>
+    <th>Coste<br>anual</th>
+    <th>Margen<br>escalado</th>
+  </tr>
+</thead>
 
                 <tbody id="baseline-rows"></tbody>
               </table>
@@ -1405,6 +1409,13 @@
               <td class="money">
                 ${revenue(row)}
               </td>
+              <td class="money">
+  ${money(row.annual_cost_eur)}
+</td>
+
+<td class="money">
+  ${money(row.annual_margin_eur)}
+</td>
 
               <td class="reason">
                 ${escapeHtml(row.reason)}
@@ -1435,6 +1446,14 @@
               <td class="money">
                 ${revenue(row)}
               </td>
+
+              <td class="money">
+  ${money(row.annual_cost_eur)}
+</td>
+
+<td class="money">
+  ${money(row.annual_margin_eur)}
+</td>
             </tr>
           `
         )
